@@ -46,7 +46,7 @@ clean:
 # the difference is one prompt versus one per reinstall.
 install: SIGN_TARGET = $${CARGO_INSTALL_ROOT:-$$HOME/.cargo}/bin/$(BIN)
 install:
-	$(CARGO) install --path . --force
+	$(CARGO) install --locked --path . --force
 	@$(SIGN)
 
 deps:
