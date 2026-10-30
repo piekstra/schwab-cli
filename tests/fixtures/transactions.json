@@ -1,0 +1,242 @@
+[
+  {
+    "activityId": 90000000001,
+    "time": "2026-03-14T14:31:02+0000",
+    "accountNumber": "11111111",
+    "type": "TRADE",
+    "status": "VALID",
+    "subAccount": "MARGIN",
+    "tradeDate": "2026-03-14T14:31:02+0000",
+    "positionId": 70000000001,
+    "orderId": 80000000001,
+    "netAmount": 249.49,
+    "transferItems": [
+      {
+        "instrument": {
+          "assetType": "CURRENCY",
+          "status": "ACTIVE",
+          "symbol": "CURRENCY_USD",
+          "description": "USD currency",
+          "instrumentId": 1,
+          "closingPrice": 0.0
+        },
+        "amount": 0.5,
+        "cost": -0.5,
+        "feeType": "COMMISSION"
+      },
+      {
+        "instrument": {
+          "assetType": "CURRENCY",
+          "status": "ACTIVE",
+          "symbol": "CURRENCY_USD",
+          "description": "USD currency",
+          "instrumentId": 1,
+          "closingPrice": 0.0
+        },
+        "amount": 0.0,
+        "cost": 0.0,
+        "feeType": "SEC_FEE"
+      },
+      {
+        "instrument": {
+          "assetType": "CURRENCY",
+          "status": "ACTIVE",
+          "symbol": "CURRENCY_USD",
+          "description": "USD currency",
+          "instrumentId": 1,
+          "closingPrice": 0.0
+        },
+        "amount": 0.01,
+        "cost": -0.01,
+        "feeType": "OPT_REG_FEE"
+      },
+      {
+        "instrument": {
+          "assetType": "CURRENCY",
+          "status": "ACTIVE",
+          "symbol": "CURRENCY_USD",
+          "description": "USD currency",
+          "instrumentId": 1,
+          "closingPrice": 0.0
+        },
+        "amount": 0.0,
+        "cost": 0.0,
+        "feeType": "TAF_FEE"
+      },
+      {
+        "instrument": {
+          "assetType": "OPTION",
+          "status": "ACTIVE",
+          "symbol": "AAPL  260320C00180000",
+          "uniformSymbol": "AAPL  260320C00180000",
+          "description": "AAPL 03/20/2026 180.00 C",
+          "instrumentId": 2,
+          "closingPrice": 2.05,
+          "expirationDate": "2026-03-20T20:00:00+0000",
+          "optionDeliverables": [
+            {
+              "rootSymbol": "AAPL",
+              "strikePercent": 100,
+              "deliverableNumber": 1,
+              "deliverableUnits": 100.0,
+              "deliverable": {
+                "assetType": "EQUITY",
+                "status": "ACTIVE",
+                "symbol": "AAPL",
+                "uniformSymbol": "AAPL",
+                "description": "DUMMY COMMON STOCK",
+                "instrumentId": 3,
+                "closingPrice": 178.5,
+                "type": "COMMON_STOCK"
+              }
+            }
+          ],
+          "optionPremiumMultiplier": 100,
+          "putCall": "CALL",
+          "strikePrice": 180.0,
+          "type": "VANILLA",
+          "underlyingSymbol": "AAPL",
+          "underlyingCusip": "111111111"
+        },
+        "amount": -1.0,
+        "cost": 250.0,
+        "price": 2.5,
+        "positionEffect": "CLOSING"
+      }
+    ]
+  },
+  {
+    "activityId": 90000000002,
+    "time": "2026-03-13T13:55:09+0000",
+    "accountNumber": "11111111",
+    "type": "TRADE",
+    "status": "VALID",
+    "subAccount": "MARGIN",
+    "tradeDate": "2026-03-13T13:55:09+0000",
+    "positionId": 70000000001,
+    "orderId": 80000000002,
+    "netAmount": -301.03,
+    "transferItems": [
+      {
+        "instrument": {
+          "assetType": "CURRENCY",
+          "status": "ACTIVE",
+          "symbol": "CURRENCY_USD",
+          "description": "USD currency",
+          "instrumentId": 1,
+          "closingPrice": 0.0
+        },
+        "amount": 1.0,
+        "cost": -1.0,
+        "feeType": "COMMISSION"
+      },
+      {
+        "instrument": {
+          "assetType": "CURRENCY",
+          "status": "ACTIVE",
+          "symbol": "CURRENCY_USD",
+          "description": "USD currency",
+          "instrumentId": 1,
+          "closingPrice": 0.0
+        },
+        "amount": 0.0,
+        "cost": 0.0,
+        "feeType": "SEC_FEE"
+      },
+      {
+        "instrument": {
+          "assetType": "CURRENCY",
+          "status": "ACTIVE",
+          "symbol": "CURRENCY_USD",
+          "description": "USD currency",
+          "instrumentId": 1,
+          "closingPrice": 0.0
+        },
+        "amount": 0.03,
+        "cost": -0.03,
+        "feeType": "OPT_REG_FEE"
+      },
+      {
+        "instrument": {
+          "assetType": "CURRENCY",
+          "status": "ACTIVE",
+          "symbol": "CURRENCY_USD",
+          "description": "USD currency",
+          "instrumentId": 1,
+          "closingPrice": 0.0
+        },
+        "amount": 0.0,
+        "cost": 0.0,
+        "feeType": "TAF_FEE"
+      },
+      {
+        "instrument": {
+          "assetType": "OPTION",
+          "status": "ACTIVE",
+          "symbol": "AAPL  260320C00180000",
+          "uniformSymbol": "AAPL  260320C00180000",
+          "description": "AAPL 03/20/2026 180.00 C",
+          "instrumentId": 2,
+          "closingPrice": 2.05,
+          "expirationDate": "2026-03-20T20:00:00+0000",
+          "optionDeliverables": [
+            {
+              "rootSymbol": "AAPL",
+              "strikePercent": 100,
+              "deliverableNumber": 1,
+              "deliverableUnits": 100.0,
+              "deliverable": {
+                "assetType": "EQUITY",
+                "status": "ACTIVE",
+                "symbol": "AAPL",
+                "uniformSymbol": "AAPL",
+                "description": "DUMMY COMMON STOCK",
+                "instrumentId": 3,
+                "closingPrice": 178.5,
+                "type": "COMMON_STOCK"
+              }
+            }
+          ],
+          "optionPremiumMultiplier": 100,
+          "putCall": "CALL",
+          "strikePrice": 180.0,
+          "type": "VANILLA",
+          "underlyingSymbol": "AAPL",
+          "underlyingCusip": "111111111"
+        },
+        "amount": 2.0,
+        "cost": -300.0,
+        "price": 1.5,
+        "positionEffect": "OPENING"
+      }
+    ]
+  },
+  {
+    "activityId": 90000000003,
+    "time": "2026-03-11T04:00:00+0000",
+    "description": "DUMMY EXCHANGE TRADED FUND DIVIDEND",
+    "accountNumber": "11111111",
+    "type": "DIVIDEND_OR_INTEREST",
+    "status": "VALID",
+    "subAccount": "CASH",
+    "tradeDate": "2026-03-11T04:00:00+0000",
+    "settlementDate": "2026-03-11T04:00:00+0000",
+    "netAmount": 12.34,
+    "qualifiedDividend": false,
+    "transferItems": [
+      {
+        "instrument": {
+          "assetType": "CURRENCY",
+          "status": "ACTIVE",
+          "symbol": "CURRENCY_USD",
+          "description": "USD currency",
+          "instrumentId": 1,
+          "closingPrice": 0.0
+        },
+        "amount": 12.34,
+        "cost": 0.0,
+        "price": 0.0
+      }
+    ]
+  }
+]

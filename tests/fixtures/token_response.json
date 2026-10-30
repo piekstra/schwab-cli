@@ -1,0 +1,8 @@
+{
+  "expires_in": 1800,
+  "token_type": "Bearer",
+  "scope": "api",
+  "refresh_token": "DUMMY_REFRESH_TOKEN_0000000000000000",
+  "access_token": "DUMMY_ACCESS_TOKEN_00000000000000000",
+  "id_token": "DUMMY_ID_TOKEN_000000000000000000000"
+}

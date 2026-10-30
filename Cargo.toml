@@ -1,0 +1,48 @@
+[package]
+name = "schwab-cli"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+description = "Charles Schwab brokerage accounts, positions, and realized gain/loss transaction history from the command line — Keychain-secured, agent-friendly. Read-only. Unofficial."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/piekstra/schwab-cli"
+homepage = "https://github.com/piekstra/schwab-cli"
+readme = "README.md"
+keywords = ["schwab", "brokerage", "tax", "cost-basis", "cli"]
+categories = ["command-line-utilities"]
+
+[lib]
+name = "schw"
+path = "src/lib.rs"
+
+[[bin]]
+name = "schw"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+clap_complete = "4"
+serde = { version = "1", features = ["derive"] }
+# preserve_order keeps DTO fields and table columns in the order the code builds
+# them, rather than alphabetized by serde_json's default map ordering.
+serde_json = { version = "1", features = ["preserve_order"] }
+pk-cli-core = { git = "https://github.com/piekstra/cli-common", tag = "v0.5.0", features = ["reqwest"] }
+pk-cli-secrets = { git = "https://github.com/piekstra/cli-common", tag = "v0.5.0" }
+pk-cli-config = { git = "https://github.com/piekstra/cli-common", tag = "v0.5.0" }
+pk-cli-selfupdate = { git = "https://github.com/piekstra/cli-common", tag = "v0.5.0" }
+pk-cli-auth = { git = "https://github.com/piekstra/cli-common", tag = "v0.5.0" }
+pk-cli-http = { git = "https://github.com/piekstra/cli-common", tag = "v0.5.0" }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+
+# Schwab's token endpoint authenticates the *app* with HTTP Basic
+# (base64(app_key:app_secret)), so a base64 encoder is not optional here.
+base64 = "0.23"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+
+[profile.release]
+strip = true
+lto = true
+opt-level = "z"

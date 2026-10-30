@@ -1,0 +1,113 @@
+{
+  "securitiesAccount": {
+    "type": "CASH",
+    "accountNumber": "22222222",
+    "roundTrips": 0,
+    "isDayTrader": false,
+    "isClosingOnlyRestricted": false,
+    "isPortfolioMargin": false,
+    "pfcbFlag": false,
+    "positions": [
+      {
+        "shortQuantity": 0.0,
+        "averagePrice": 150.25,
+        "currentDayProfitLoss": 125.5,
+        "currentDayProfitLossPercentage": 0.72,
+        "longQuantity": 100.0,
+        "settledLongQuantity": 100.0,
+        "settledShortQuantity": 0.0,
+        "instrument": {
+          "assetType": "COLLECTIVE_INVESTMENT",
+          "cusip": "111111111",
+          "symbol": "ETFX",
+          "uniformSymbol": "ETFX",
+          "description": "DUMMY EXCHANGE TRADED FUND",
+          "type": "EXCHANGE_TRADED_FUND"
+        },
+        "marketValue": 17550.0,
+        "maintenanceRequirement": 5265.0,
+        "averageLongPrice": 150.25,
+        "taxLotAverageLongPrice": 150.25,
+        "longOpenProfitLoss": 2525.0,
+        "previousSessionLongQuantity": 100.0,
+        "currentDayCost": 0.0
+      },
+      {
+        "shortQuantity": 50.0,
+        "averagePrice": 210.0,
+        "currentDayProfitLoss": -75.0,
+        "currentDayProfitLossPercentage": -0.71,
+        "longQuantity": 0.0,
+        "settledLongQuantity": 0.0,
+        "settledShortQuantity": -50.0,
+        "instrument": {
+          "assetType": "EQUITY",
+          "cusip": "222222222",
+          "symbol": "TSLA",
+          "uniformSymbol": "TSLA",
+          "description": "DUMMY COMMON STOCK",
+          "type": "COMMON_STOCK"
+        },
+        "marketValue": -10525.0,
+        "maintenanceRequirement": 3157.5,
+        "averageShortPrice": 210.0,
+        "taxLotAverageShortPrice": 210.0,
+        "shortOpenProfitLoss": -250.0,
+        "previousSessionShortQuantity": 50.0,
+        "currentDayCost": 0.0
+      }
+    ],
+    "initialBalances": {
+      "accruedInterest": 0.0,
+      "cashAvailableForTrading": 12000.0,
+      "cashAvailableForWithdrawal": 12000.0,
+      "cashBalance": 12000.0,
+      "bondValue": 0.0,
+      "cashReceipts": 0.0,
+      "liquidationValue": 42000.0,
+      "longOptionMarketValue": 0.0,
+      "longStockValue": 30000.0,
+      "moneyMarketFund": 0.0,
+      "mutualFundValue": 0.0,
+      "shortOptionMarketValue": 0.0,
+      "shortStockValue": 0.0,
+      "isInCall": false,
+      "unsettledCash": 0.0,
+      "cashDebitCallValue": 0.0,
+      "pendingDeposits": 0.0,
+      "accountValue": 42000.0
+    },
+    "currentBalances": {
+      "accruedInterest": 0.0,
+      "cashBalance": 12000.0,
+      "cashReceipts": 0.0,
+      "longOptionMarketValue": 0.0,
+      "liquidationValue": 42000.0,
+      "longMarketValue": 30000.0,
+      "moneyMarketFund": 0.0,
+      "savings": 0.0,
+      "shortMarketValue": 0.0,
+      "pendingDeposits": 0.0,
+      "mutualFundValue": 0.0,
+      "bondValue": 0.0,
+      "shortOptionMarketValue": 0.0,
+      "cashAvailableForTrading": 12000.0,
+      "cashAvailableForWithdrawal": 12000.0,
+      "cashCall": 0.0,
+      "longNonMarginableMarketValue": 12000.0,
+      "totalCash": 12000.0,
+      "cashDebitCallValue": 0.0,
+      "unsettledCash": 0.0
+    },
+    "projectedBalances": {
+      "cashAvailableForTrading": 12000.0,
+      "cashAvailableForWithdrawal": 12000.0
+    }
+  },
+  "aggregatedBalance": {
+    "currentLiquidationValue": 42000.0,
+    "liquidationValue": 42000.0,
+    "intradayBuyingPowerAmount": 12000.0,
+    "currentIntradayBuyingPowerAmount": 12000.0
+  }
+}

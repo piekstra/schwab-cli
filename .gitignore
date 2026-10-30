@@ -1,0 +1,12 @@
+/target
+
+# Raw API captures never enter the repo — scrubbed/synthetic fixtures only. A
+# Schwab response carries account numbers, account hashes, positions, and
+# dollar balances.
+/captures
+
+# OAuth app credentials as issued by developer.schwab.com. The app key and
+# secret are working credentials; they belong in the OS keychain, never on
+# disk in a repo.
+schwab_app*.json
+*.pem
