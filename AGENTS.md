@@ -112,16 +112,32 @@ strict enum.
 
 ## Tests
 
-Offline, always — no network, no keychain, no credential.
+Offline, always — no network, no credential, and never the real keychain
+entries.
 
 - `tests/cli_surface.rs` — black-box: every `--help` renders (catches a
   subcommand flag colliding with a global), exit codes, the `--json` error DTO,
-  `info`, completions.
+  `info`, completions, and `auth status` logged out.
 - `tests/fixture_shapes.rs` — contract tests over `tests/fixtures/`, plus a
   **positive** hygiene test asserting every identity-bearing value matches a
   dummy shape. Positive, not a denylist: a denylist of real account numbers
   would publish exactly what it exists to exclude.
 - Unit tests inline in `#[cfg(test)] mod tests`.
+
+Hermeticity is enforced by `SCHW_KEYCHAIN_SERVICE`, which replaces the keychain
+service name (`piekstra.schw`) for one invocation. Every black-box test runs
+through the `schw()` helper in `tests/cli_surface.rs`, which sets it to
+`piekstra.schw.hermetic-tests`, a service that holds nothing, and points
+`XDG_CONFIG_HOME` at a scratch directory. Reading a missing keychain item needs
+no approval, so `auth status` answers logged out on any machine. Without the
+override, `cargo test` would open the real entries from an ad-hoc-signed binary,
+a new code identity on every rebuild, raising a macOS keychain prompt per entry
+per run, and `auth status` would report the developer's session. New black-box
+tests go through `schw()`. The variable exists for the suite: it only renames
+the service, carries no key material, and is not a user-facing setting.
+
+`make smoke` runs `auth status` from the release binary against the same empty
+service, so `make verify` raises no keychain dialog whatever the binary's identity.
 
 Fixtures are **scrubbed live captures** (2026-08-12) —
 `tests/fixtures/README.md` records what was captured, what remains

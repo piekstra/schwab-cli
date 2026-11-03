@@ -365,7 +365,7 @@ machine.
 What this protects is two copies both renewing, for example two commands an agent
 runs at once. Schwab documents no revocation on reuse of a refresh token, and none
 has been observed here, so the lock is not known to prevent one. It only excludes
-copies that take it, which starts at 0.1.2.
+copies that take it, which starts at 0.1.3.
 
 **Consequence for a once-a-year tax job:** there is no unattended path. Any
 run more than 7 days after the last login needs a browser. Plan for

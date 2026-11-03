@@ -173,7 +173,7 @@ ad-hoc signs and silently revokes them.
 
 ```console
 $ make verify     # fmt-check + clippy -D warnings + tests + smoke — the CI gate
-$ make test       # fully offline: no network, no keychain, no credential
+$ make test       # fully offline: no network, no credential, never the real keychain entries
 ```
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`AGENTS.md`](AGENTS.md).

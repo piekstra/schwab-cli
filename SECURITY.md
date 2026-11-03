@@ -22,7 +22,7 @@ protecting:
 - **Not a secret:** `~/.config/schw/token-refresh.lock` is an empty file. `schw`
   processes lock it while renewing the session, so two running copies do not
   renew at the same time. That holds once every copy sharing the keychain item
-  is 0.1.2 or later, including a process not yet restarted.
+  is 0.1.3 or later, including a process not yet restarted.
 - **The authorization code**, for the ~30 seconds it lives. It is a bearer
   credential, which is why `auth login` reads it from stdin or a prompt and
   never as a flag value — argv is visible in the process table and in shell

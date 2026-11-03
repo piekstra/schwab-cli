@@ -1,9 +1,11 @@
 //! Black-box tests over the built binary.
 //!
-//! Fully offline: no network, no keychain, no credential. Every test here runs
-//! a command that either fails before touching either, or renders help. That
-//! constraint is what makes this suite safe to run in CI on a machine with no
-//! Schwab app at all.
+//! Fully offline: no network, and never the real keychain entries. Every test
+//! here runs a command that reaches neither: it renders help or discovery
+//! output, fails argument validation, or (for `auth status`) reads an empty
+//! keychain service. That constraint is what makes this suite safe to run in
+//! CI on a machine with no Schwab app at all, and on a developer machine that
+//! holds a live session.
 //!
 //! The `--help` sweep exists for a specific failure: a subcommand flag that
 //! collides with a global (`-q`, `-v`, `--json`) makes clap panic at *runtime*,
@@ -12,11 +14,24 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 
+/// Every invocation goes through here, so none can reach the real keychain
+/// entries or config.
 fn schw() -> Command {
     let mut cmd = Command::cargo_bin("schw").expect("binary builds");
     // Point the config at a scratch directory so a developer's real config
     // cannot influence a test result, and a test cannot influence their config.
     cmd.env("XDG_CONFIG_HOME", env!("CARGO_TARGET_TMPDIR"));
+    // Point the keychain at a service that holds nothing. The binary
+    // `cargo test` builds is ad-hoc signed, a new code identity on every
+    // rebuild, so opening the real `piekstra.schw` entries would raise a macOS
+    // approval prompt per entry per run, and `auth status` would report the
+    // developer's session rather than the logged-out state asserted below.
+    // Reading a missing item needs no approval.
+    cmd.env("SCHW_KEYCHAIN_SERVICE", "piekstra.schw.hermetic-tests");
+    // The token-refresh lock is anchored to the home directory alone, so no test
+    // can reach the real one through a command added later.
+    cmd.env("HOME", env!("CARGO_TARGET_TMPDIR"));
+    cmd.env("USERPROFILE", env!("CARGO_TARGET_TMPDIR"));
     cmd
 }
 
@@ -108,7 +123,12 @@ fn auth_status_works_logged_out_and_emits_the_canonical_dto() {
         serde_json::from_slice(&out.get_output().stdout).expect("auth status emits JSON");
     assert_eq!(v["schema"], "auth-status/v1");
     assert_eq!(v["required"], true);
-    assert!(v["authenticated"].is_boolean());
+    // The hermetic service holds nothing, so this is the logged-out answer
+    // whether or not the machine running the suite has a session stored.
+    assert_eq!(v["authenticated"], false);
+    assert_eq!(v["credential_in_keychain"], false);
+    assert_eq!(v["session_valid"], false);
+    assert!(v.get("expires_at").is_none(), "{v}");
 }
 
 /// Exactly one JSON document per invocation (SPEC v1 §1.4).
