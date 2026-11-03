@@ -38,8 +38,8 @@ $ cargo run -- <command>
 ```
 
 CI (`.github/workflows/ci.yml`) runs `cargo fmt --check`, clippy with
-`-D warnings`, the tests and a release build, plus a cargo-audit / cargo-deny /
-gitleaks job. It does not run `smoke`. A green `make verify` predicts a green
+`-D warnings`, the tests and `smoke`, which builds the release binary, plus a
+cargo-audit / cargo-deny / gitleaks job. A green `make verify` predicts a green
 build job. `smoke` runs `auth status` against an empty keychain service
 (`piekstra.schw.hermetic-tests`), so it never reads your real entries.
 

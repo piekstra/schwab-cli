@@ -273,8 +273,8 @@ $ make verify     # fmt-check + clippy -D warnings + tests + smoke — the local
 $ make test       # fully offline: no network, no credential, never the real keychain entries
 ```
 
-CI runs the same fmt check, clippy, tests and release build, but not `smoke`,
-plus a cargo-audit / cargo-deny / gitleaks job. `smoke` never reads the real
+CI runs the same fmt check, clippy, tests and `smoke`, which builds the release
+binary, plus a cargo-audit / cargo-deny / gitleaks job. `smoke` never reads the real
 keychain entries.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`AGENTS.md`](AGENTS.md).
