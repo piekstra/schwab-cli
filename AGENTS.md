@@ -9,7 +9,7 @@ Canonical guide for anyone — human or agent — working in this repo.
 [piekstra-cli/1](https://github.com/piekstra/cli-common); the shared crates are
 pinned to tag `v0.20.0`.
 
-## The four facts that shape everything here
+## The five facts that shape everything here
 
 1. **Live verification happened on 2026-08-12** — OAuth login, refresh, and
    every read command ran against a real app and two real accounts, and the
