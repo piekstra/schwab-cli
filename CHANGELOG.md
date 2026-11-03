@@ -10,6 +10,8 @@ signal.
   forgetting the CLI leaves no credential of its in the keychain.
 - A release is published only once every asset is on it, so `self-update` never sends
   anyone to a release that lacks their platform. A build that failed leaves a draft.
+- A release runs the binaries its runner can execute before packing them, so one that
+  builds and then fails at startup is not published.
 
 ## 0.2.0 — 2026-11-03
 
