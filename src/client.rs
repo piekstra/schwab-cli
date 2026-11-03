@@ -121,7 +121,8 @@ impl<'a> Schwab<'a> {
             .query(query)
             .bearer_auth(token)
             .header("Accept", "application/json")
-            .send()?;
+            .send()
+            .map_err(network_failure)?;
         response_json(resp)
     }
 
@@ -228,7 +229,25 @@ fn renew_session(
 /// a 403 is an entitlement refusal that a new token gets too, and a long-running
 /// server asked again and again must not spend a grant on each.
 fn worth_a_renewal(refusal: &str) -> bool {
-    refusal.ends_with("(HTTP 401)")
+    has_status(refusal, 401)
+}
+
+/// A failure that got no answer, without its URL. `reqwest` prints the URL it was
+/// asked for, and a URL here holds an account hash, which must not reach a log, a
+/// `--json` error or a tool result.
+pub fn network_failure(e: reqwest::Error) -> CliError {
+    e.without_url().into()
+}
+
+/// An error message for an answer with this status. [`has_status`] is how anything
+/// that acts on the status reads it back, so the two cannot drift apart.
+pub fn with_status(message: &str, status: u16) -> String {
+    format!("{message} (HTTP {status})")
+}
+
+/// Whether a message built by [`with_status`] carries this status.
+pub fn has_status(message: &str, status: u16) -> bool {
+    message.ends_with(&format!("(HTTP {status})"))
 }
 
 /// Map a response onto the exit-code contract, preferring Schwab's own message
@@ -243,8 +262,12 @@ fn worth_a_renewal(refusal: &str) -> bool {
 /// error instead of "your token was rejected".
 pub fn response_json(resp: reqwest::blocking::Response) -> Result<Value, CliError> {
     let status = resp.status().as_u16();
-    let body = resp.text().unwrap_or_default();
-    let parsed: Option<Value> = serde_json::from_str(&body).ok();
+    answer_json(status, &resp.text().unwrap_or_default())
+}
+
+/// [`response_json`] once the answer has been read.
+pub fn answer_json(status: u16, body: &str) -> Result<Value, CliError> {
+    let parsed: Option<Value> = serde_json::from_str(body).ok();
 
     if (200..300).contains(&status) {
         return parsed.ok_or_else(|| {
@@ -256,8 +279,8 @@ pub fn response_json(resp: reqwest::blocking::Response) -> Result<Value, CliErro
 
     let detail = parsed.as_ref().and_then(error_message);
     let say = |fallback: &str| match &detail {
-        Some(m) => format!("{m} (HTTP {status})"),
-        None => format!("{fallback} (HTTP {status})"),
+        Some(m) => with_status(m, status),
+        None => with_status(fallback, status),
     };
 
     Err(match status {
@@ -470,8 +493,12 @@ mod tests {
 
     #[test]
     fn only_a_401_is_worth_a_renewal() {
-        assert!(worth_a_renewal("Schwab rejected it (HTTP 401)"));
-        assert!(!worth_a_renewal("the app is not entitled (HTTP 403)"));
+        let refusal = |status| match answer_json(status, "{\"message\":\"no\"}") {
+            Err(CliError::Auth(m)) => m,
+            other => panic!("{status}: {other:?}"),
+        };
+        assert!(worth_a_renewal(&refusal(401)));
+        assert!(!worth_a_renewal(&refusal(403)));
         assert!(!worth_a_renewal("not logged in to Schwab"));
     }
 
@@ -514,5 +541,25 @@ mod tests {
     #[test]
     fn a_non_json_body_is_not_mistaken_for_a_payload() {
         assert!(serde_json::from_str::<Value>("<html>503</html>").is_err());
+    }
+
+    /// Against a port nobody listens on: the failure is real, from `reqwest`.
+    #[test]
+    fn a_failure_with_no_answer_does_not_carry_its_url() {
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let raw = reqwest::blocking::Client::new()
+            .get(format!(
+                "http://127.0.0.1:{port}/trader/v1/accounts/DUMMYHASH/transactions"
+            ))
+            .send()
+            .unwrap_err();
+        assert!(raw.to_string().contains("DUMMYHASH"), "the premise: {raw}");
+        let told = network_failure(raw).to_string();
+        assert!(!told.contains("DUMMYHASH"), "{told}");
+        assert!(!told.contains("/trader/"), "{told}");
     }
 }

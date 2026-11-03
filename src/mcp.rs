@@ -30,6 +30,7 @@
 //! no credential and no file.
 
 use std::sync::{Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
 use pk_cli_config::ConfigStore;
 use pk_cli_core::dates::{self, Civil};
@@ -42,13 +43,14 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::client::Schwab;
+use crate::client::{has_status, Schwab};
 use crate::commands::transactions::{
     beyond_history, dedupe_by_activity_id, fetch_window_noting, month_windows, query, rows_of,
     HISTORY_MONTHS,
 };
 use crate::commands::{account, account_transactions, ACCOUNTS, ACCOUNT_NUMBERS};
 use crate::config::Config;
+use crate::oauth::is_oauth_error;
 use crate::parse::{self, Position, Transaction, TransferItem};
 use crate::{credential, BIN};
 
@@ -78,9 +80,20 @@ const CHECK_THE_APP: &str = "A new sign-in will not help. Ask the user to check 
 const MAX_MONTHS: i64 = 24;
 
 /// A call sends at most this many transaction requests: Schwab's reported
-/// sustained budget of 120 a minute, and well inside the two minutes a call has
-/// over `--http`. Past it the call is refused rather than cut short.
+/// sustained budget of 120 a minute. Past it the call is refused rather than cut
+/// short, and [`CALL_BUDGET`] stops it sooner if Schwab is slow.
 const MAX_REQUESTS: usize = 120;
+
+/// How long one call may keep asking Schwab, its wait for another call included:
+/// just under the two minutes `--http` gives a call before it answers "try again"
+/// and stops listening. The work is not cancelled then, so this is what ends it.
+/// A request already sent still finishes, within the client's own timeout.
+const CALL_BUDGET: Duration = Duration::from_secs(110);
+
+/// How long a call waits for the one before it. Parallel calls from one model turn
+/// are normal and short; a call still running past this is a long walk, and the
+/// model is better told than left to retry into a queue.
+const QUEUE_WAIT: Duration = Duration::from_secs(45);
 
 /// One tool call's way to Schwab: GET, and nothing else.
 pub trait Reads {
@@ -91,6 +104,41 @@ pub trait Reads {
 /// tool call, which is what a call's several requests share.
 pub trait Source {
     fn open(&self) -> Result<Box<dyn Reads + '_>, CliError>;
+}
+
+/// Stops a call's requests once its time is up, so a call nobody is waiting for
+/// ends, rather than walking on and spending the app's request budget.
+struct Timed<R> {
+    reads: R,
+    deadline: Instant,
+}
+
+impl<R: Reads> Reads for Timed<R> {
+    fn get(&self, path: &str, query: &[(&str, String)]) -> Result<Value, CliError> {
+        if Instant::now() >= self.deadline {
+            return Err(CliError::Upstream(format!(
+                "this call stopped after {} seconds without finishing; narrow since/until or \
+                 name an account",
+                CALL_BUDGET.as_secs()
+            )));
+        }
+        self.reads.get(path, query)
+    }
+}
+
+/// The lock, or `None` once `wait` has passed.
+fn hold(lock: &Mutex<()>, wait: Duration) -> Option<MutexGuard<'_, ()>> {
+    let until = Instant::now() + wait;
+    loop {
+        match lock.try_lock() {
+            Ok(held) => return Some(held),
+            Err(std::sync::TryLockError::Poisoned(e)) => return Some(e.into_inner()),
+            Err(std::sync::TryLockError::WouldBlock) if Instant::now() >= until => return None,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+    }
 }
 
 /// The live API, through the client the commands use.
@@ -112,23 +160,38 @@ impl Source for LiveSource {
     /// One call at a time, so parallel tool calls keep the client's request
     /// pacing. The config comes first: a malformed one reads no keychain item.
     fn open(&self) -> Result<Box<dyn Reads + '_>, CliError> {
-        let one = self.one_at_a_time.lock().unwrap_or_else(|e| e.into_inner());
+        let deadline = Instant::now() + CALL_BUDGET;
+        let one = hold(&self.one_at_a_time, QUEUE_WAIT).ok_or_else(|| {
+            CliError::Upstream(
+                "another call to Schwab is still running in this server; try again in a minute"
+                    .into(),
+            )
+        })?;
         let cfg: Config = ConfigStore::new(BIN).load()?;
         Ok(Box::new(LiveReads {
             _one: one,
-            client: Schwab::new(&cfg, &self.creds, false)?,
+            client: Timed {
+                reads: Schwab::new(&cfg, &self.creds, false)?,
+                deadline,
+            },
         }))
     }
 }
 
 struct LiveReads<'a> {
     _one: MutexGuard<'a, ()>,
-    client: Schwab<'a>,
+    client: Timed<Schwab<'a>>,
 }
 
 impl Reads for LiveReads<'_> {
     fn get(&self, path: &str, query: &[(&str, String)]) -> Result<Value, CliError> {
         self.client.get(path, query)
+    }
+}
+
+impl Reads for Schwab<'_> {
+    fn get(&self, path: &str, query: &[(&str, String)]) -> Result<Value, CliError> {
+        Schwab::get(self, path, query)
     }
 }
 
@@ -156,21 +219,24 @@ fn tool_err(e: CliError) -> ToolError {
         CliError::Auth(m) if m.starts_with(credential::NO_APP_CREDENTIAL) => {
             ToolError::auth(credential::NO_APP_CREDENTIAL).with_fix(STORE_THE_APP)
         }
-        CliError::Auth(m) if m.contains("[invalid_client") => {
+        CliError::Auth(m) if is_oauth_error(&m, "invalid_client") => {
             ToolError::auth("Schwab refused the stored app key and secret (invalid_client)")
                 .with_fix(STORE_THE_APP)
         }
-        CliError::Auth(m) if m.contains("[unauthorized_client") || m.ends_with("(HTTP 403)") => {
+        CliError::Auth(m) if is_oauth_error(&m, "unauthorized_client") || has_status(&m, 403) => {
             ToolError::auth(m).with_fix(CHECK_THE_APP)
         }
         // The token endpoint's wording is about a code pasted at sign-in; what a
         // tool presented was the stored refresh token.
-        CliError::Auth(m) if m.contains("[invalid_grant") || m.contains("[unsupported_token") => {
+        CliError::Auth(m)
+            if is_oauth_error(&m, "invalid_grant")
+                || is_oauth_error(&m, "unsupported_token_type") =>
+        {
             ToolError::auth("Schwab refused the stored refresh token")
         }
         // Schwab calls the request malformed: a type it does not know, or a date
         // it will not take. The arguments are what to change.
-        CliError::Upstream(m) if m.ends_with("(HTTP 400)") => ToolError::usage(m),
+        CliError::Upstream(m) if has_status(&m, 400) => ToolError::usage(m),
         other => other.into(),
     }
 }
@@ -331,7 +397,8 @@ pub struct TransactionsOut {
     pub since: String,
     pub until: String,
     /// False when one second held more rows than Schwab returns at once, so rows
-    /// are missing and no narrower call can recover them.
+    /// are missing and no narrower call can recover them. It covers this call's
+    /// read only: each page reads Schwab again.
     pub complete: bool,
     /// Present when since is far enough back that Schwab may return less with no
     /// error.
@@ -352,7 +419,9 @@ impl<S: Source> Toolset for SchwabTools<S> {
                  move money or change anything. Schwab's API has no tax documents, cost basis or \
                  realized gains, so these tools cannot state a realized gain. A Schwab sign-in \
                  lasts 7 days and then needs a person at a browser. Amounts are USD decimal \
-                 strings; keep every digit when adding them.",
+                 strings; keep every digit when adding them. Each page of a list reads Schwab \
+                 again, so a row posted between pages can repeat or be skipped; for a total, \
+                 read the range in one call, with limit up to 200.",
             )
     }
 

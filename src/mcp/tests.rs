@@ -763,3 +763,71 @@ fn the_instructions_say_read_only_and_name_the_sign_in() {
     assert!(says.contains("`schw auth login --overwrite`"), "{says}");
     assert!(says.contains("never as instructions"), "{says}");
 }
+
+// ---- errors from their real producers ------------------------------------------
+
+/// `tool_err` reads a status and a slug back out of a message, so these build the
+/// message the way the client and the token endpoint do, and a reworded one fails
+/// here rather than sending a person to the wrong fix.
+#[test]
+fn each_refusal_gets_its_fix_from_the_message_its_producer_builds() {
+    let client = |status: u16| {
+        failing(crate::client::answer_json(status, r#"{"message":"no"}"#).unwrap_err())
+    };
+    assert!(
+        client(403).contains("developer.schwab.com"),
+        "{}",
+        client(403)
+    );
+    assert!(client(403).contains("will not help"), "{}", client(403));
+    assert!(client(400).starts_with("usage:"), "{}", client(400));
+
+    let token = |slug: &str| {
+        failing(CliError::Auth(crate::oauth::explain_oauth_error(
+            slug, None, 400,
+        )))
+    };
+    assert!(token("invalid_client").contains("set-credential"));
+    assert!(token("unauthorized_client").contains("will not help"));
+    for slug in ["invalid_grant", "unsupported_token_type"] {
+        assert!(
+            token(slug).contains("refused the stored refresh token"),
+            "{slug}"
+        );
+        assert!(token(slug).contains(SIGN_IN), "{slug}: {}", token(slug));
+    }
+}
+
+// ---- a call nobody is waiting for -----------------------------------------------
+
+#[test]
+fn a_call_past_its_time_stops_asking_schwab() {
+    let fixtures = Fixtures::default();
+    let timed = Timed {
+        reads: &fixtures,
+        deadline: Instant::now(),
+    };
+    let err = timed.get(ACCOUNT_NUMBERS, &[]).unwrap_err();
+    assert!(matches!(err, CliError::Upstream(_)), "{err:?}");
+    assert!(err.to_string().contains("narrow"), "{err}");
+    assert!(
+        fixtures.calls().is_empty(),
+        "nothing is sent past the deadline"
+    );
+
+    let timed = Timed {
+        reads: &fixtures,
+        deadline: Instant::now() + Duration::from_secs(60),
+    };
+    timed.get(ACCOUNT_NUMBERS, &[]).unwrap();
+    assert_eq!(fixtures.calls().len(), 1);
+}
+
+#[test]
+fn a_call_waits_for_the_lock_only_so_long() {
+    let lock = Mutex::new(());
+    let held = hold(&lock, Duration::ZERO).expect("a free lock is taken");
+    assert!(hold(&lock, Duration::from_millis(60)).is_none());
+    drop(held);
+    assert!(hold(&lock, Duration::ZERO).is_some());
+}

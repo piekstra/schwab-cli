@@ -184,8 +184,16 @@ never larger than about 32,000 characters. An account goes by its type and last 
 digits (`MARGIN …1234`); no result carries the full number or the hash. A transaction
 list that Schwab's per-response cap cut short says `complete: false`, and one reaching
 back more than 12 months carries a `note`, because Schwab returns less without an
-error when its history runs out. Descriptions come from Schwab and other parties; the
-server tells Claude to treat them as data, not instructions.
+error when its history runs out. Each page reads Schwab again, so a row posted between
+pages can repeat or be skipped: for a total, read the range in one call, with `limit` up
+to 200. Descriptions come from Schwab and other parties; the server tells Claude to
+treat them as data, not instructions.
+
+The tools are worded for a model, so two things differ from `--json`. Amounts are plain
+decimal strings, with `unrealized_gain`, `day_gain` and `amount` where `positions --json`
+and `transactions list --json` have `open_pl`, `day_pl` and `net_amount`. And
+`schwab_transactions` covers every type unless `type` names one, where `schw transactions
+list` covers `TRADE` unless `--all-types` is passed.
 
 **Sign in first.** Sign-in is through a browser, so no settings form can hold it. Run
 `schw auth set-credential --stdin` and `schw auth login` in a terminal (see
