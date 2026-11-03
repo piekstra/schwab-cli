@@ -344,6 +344,22 @@ tool never claims a healthy session that is about to require a human.
 `auth status` reported the identical re-authorization deadline before and
 after.
 
+**Two running copies.** A renewal runs under an exclusive lock on
+`~/.config/schw/token-refresh.lock` (`pk_cli_auth::refresh_lock`, an empty file,
+whatever `XDG_CONFIG_HOME` says). It reads the tokens again once it holds the
+lock. If the stored access token is no longer the one this process held and is
+still good, another process renewed: no grant, and this process uses those
+tokens. `auth refresh` always posts a grant, with the stored refresh token. A wait
+is bounded at 75 s, then exit 5 naming the lock with nothing sent. A lock file
+that cannot be created or locked is exit 1. `auth login` and `auth logout` hold it
+around their keychain write only, so a renewal in flight cannot overwrite a new
+session and its new deadline, or store a session again after a logout.
+
+What this protects is two copies both renewing, for example two commands an agent
+runs at once. Schwab documents no revocation on reuse of a refresh token, and none
+has been observed here, so the lock is not known to prevent one. It only excludes
+copies that take it, which starts at 0.1.2.
+
 **Consequence for a once-a-year tax job:** there is no unattended path. Any
 run more than 7 days after the last login needs a browser. Plan for
 `schw auth login` as a manual step every time.

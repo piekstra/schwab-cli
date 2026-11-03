@@ -12,12 +12,11 @@ all: verify
 build:
 	$(CARGO) build
 
-# Signed like `install`: `smoke` runs this binary against the real keychain
-# (`auth status`), and an ad-hoc-signed build is a brand-new code identity —
-# every `make verify` would throw two fresh "Always Allow" prompts (one per
-# keychain entry). Signed with the stable identity, the grant made for the
-# installed binary covers this one too, since both satisfy the same designated
-# requirement.
+# Signed like `install`: `SCHW_TEST_KEYCHAIN=1 make smoke` runs this binary against
+# the real keychain (`auth status`), and an ad-hoc-signed build is a brand-new code
+# identity that would throw two fresh "Always Allow" prompts (one per keychain
+# entry). Signed with the stable identity, the grant made for the installed binary
+# covers this one too, since both satisfy the same designated requirement.
 release: SIGN_TARGET = target/release/$(BIN)
 release:
 	$(CARGO) build --release
@@ -73,6 +72,6 @@ smoke: release
 	./target/release/$(BIN) --version
 	./target/release/$(BIN) --help > /dev/null
 	./target/release/$(BIN) info > /dev/null
-	./target/release/$(BIN) auth status --json > /dev/null
+	@if [ "$(SCHW_TEST_KEYCHAIN)" = 1 ]; then ./target/release/$(BIN) auth status --json > /dev/null; fi
 
 verify: fmt-check lint test smoke

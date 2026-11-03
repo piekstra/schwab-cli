@@ -12,6 +12,7 @@
 
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
+use pk_cli_auth::refresh_lock::RefreshLock;
 use pk_cli_auth::{AuthStatus, LogoutArgs, SecretSourceArgs, SetCredentialArgs};
 use pk_cli_config::ConfigStore;
 use pk_cli_core::info::{AuthInfo, CliInfo};
@@ -24,9 +25,8 @@ use schw::client::Schwab;
 use schw::commands::{accounts, api, positions, transactions, Ctx, ACCOUNT_NUMBERS};
 use schw::config::{self, Config, KEYCHAIN_APP, KEYCHAIN_TOKENS};
 use schw::credential::{self, AppCredential};
-use schw::oauth;
+use schw::{oauth, BIN};
 
-const BIN: &str = "schw";
 const REPO: &str = "piekstra/schwab-cli";
 
 /// Charles Schwab brokerage accounts, positions, and transaction history from
@@ -195,7 +195,9 @@ fn auth(
         AuthCmd::Status => status(cli, creds, cfg),
         AuthCmd::Refresh => refresh(cli, creds, cfg),
         AuthCmd::Logout(args) => {
-            creds.delete(KEYCHAIN_TOKENS)?;
+            // The delete runs with or without the lock; a renewal in flight must
+            // not store the session again behind it.
+            RefreshLock::forget_for_binary(BIN, || creds.delete(KEYCHAIN_TOKENS))?;
             if args.forget {
                 // The app credential is deliberately *not* dropped by a plain
                 // logout. Re-registering an app costs days in Schwab's approval
@@ -273,6 +275,15 @@ fn login(
         ));
     }
 
+    let lock = RefreshLock::for_binary(BIN)?;
+    if args.source.stdin || args.source.from_env.is_some() {
+        // The code in that URL is already running out: refuse an unusable lock, but
+        // do not wait on a busy one before spending it. The write below waits.
+        lock.try_hold(|| Ok(()))?;
+    } else {
+        lock.before_signin()?;
+    }
+
     if !cli.common.quiet {
         eprintln!("1. Open this URL and sign in to Schwab, then select the accounts to link:\n");
         eprintln!("   {url}\n");
@@ -307,7 +318,9 @@ fn login(
         &redirect_uri,
         oauth::now_unix(),
     )?;
-    credential::write_tokens(creds, &tokens)?;
+    // Under the lock, so a renewal in flight cannot overwrite this session and its
+    // new 7-day deadline with the old one's.
+    lock.store_signin(|| credential::write_tokens(creds, &tokens))?;
 
     if !cli.common.quiet {
         eprintln!(
@@ -354,31 +367,12 @@ fn open_browser(url: &str, quiet: bool) {
 }
 
 fn refresh(cli: &Cli, creds: &CredentialStore, cfg: &Config) -> Result<(), CliError> {
-    let app = credential::require_app(creds)?;
-    let tokens = credential::read_tokens(creds)?
-        .ok_or_else(|| CliError::Auth("not logged in — run `schw auth login`".into()))?;
-    let now = oauth::now_unix();
-    if tokens.refresh_expired(now) {
-        return Err(CliError::Auth(
-            "the refresh token has expired (they last 7 days and cannot be renewed) — \
-             run `schw auth login`"
-                .into(),
-        ));
-    }
-    let http = pk_cli_http::client(BIN, env!("CARGO_PKG_VERSION"))?;
-    let fresh = oauth::refresh_tokens(
-        &http,
-        &cfg.base_url(),
-        &app,
-        &tokens.refresh_token,
-        now,
-        tokens.refresh_expires_at,
-    )?;
-    credential::write_tokens(creds, &fresh)?;
+    let client = Schwab::new(cfg, creds, cli.common.verbose)?;
+    client.refresh_now()?;
     if !cli.common.quiet {
         eprintln!(
             "access token refreshed; browser re-authorization still required by {}",
-            dates::fmt_iso(dates::civil_from_unix(fresh.refresh_expires_at as i64))
+            dates::fmt_iso(dates::civil_from_unix(client.refresh_expires_at() as i64))
         );
     }
     Ok(())

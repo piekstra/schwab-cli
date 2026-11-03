@@ -7,7 +7,7 @@ Canonical guide for anyone — human or agent — working in this repo.
 `schw`, a piekstra-family CLI over Charles Schwab's Trader API
 (`api.schwabapi.com`). Read-only. Conforms to
 [piekstra-cli/1](https://github.com/piekstra/cli-common); the shared crates are
-pinned to tag `v0.15.1`.
+pinned to tag `v0.20.0`.
 
 ## The four facts that shape everything here
 
@@ -25,6 +25,11 @@ pinned to tag `v0.15.1`.
 4. **The refresh token dies after 7 days and cannot be renewed.** Every
    unattended-automation idea runs into this wall. It is Schwab policy.
    Live-verified: `auth refresh` does not move the deadline.
+5. **A renewal runs under `pk_cli_auth`'s `RefreshLock`**
+   (`~/.config/schw/token-refresh.lock`, an empty file), so two running copies
+   do not both renew. A login and a logout hold it around their keychain write
+   only, never across the browser. Schwab documents no reuse revocation, so do
+   not claim the lock prevents one. See `docs/api.md`.
 
 ## Layout
 
@@ -33,7 +38,7 @@ pinned to tag `v0.15.1`.
 | `src/main.rs` | clap tree, auth/config commands, exit-code mapping |
 | `src/oauth.rs` | authorization URL, code exchange, refresh, error explanations |
 | `src/credential.rs` | the two keychain entries; hand-written `Debug` impls |
-| `src/client.rs` | GET-only HTTP client, token refresh, status→exit-code mapping |
+| `src/client.rs` | GET-only HTTP client, token refresh under the cross-process lock, status→exit-code mapping |
 | `src/config.rs` | non-secret settings (`base_url`, `redirect_uri`, `account`) |
 | `src/parse.rs` | Schwab JSON → DTOs; every function total |
 | `src/urlenc.rs` | percent encode/decode; the authorization-code trap lives here |

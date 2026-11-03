@@ -3,6 +3,8 @@
 //! Read-only. See `main.rs` for the command surface and `docs/api.md` for what
 //! the API does and does not expose.
 
+pub const BIN: &str = "schw";
+
 pub mod client;
 pub mod commands;
 pub mod config;

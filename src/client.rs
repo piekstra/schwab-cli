@@ -13,6 +13,7 @@
 use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
+use pk_cli_auth::refresh_lock::RefreshLock;
 use pk_cli_core::CliError;
 use pk_cli_secrets::CredentialStore;
 use serde_json::Value;
@@ -145,40 +146,82 @@ impl<'a> Schwab<'a> {
         Ok(())
     }
 
+    /// Renew because the access token this process holds is expired or refused,
+    /// unless another process has renewed it since.
+    fn refresh(&self) -> Result<(), CliError> {
+        let presented = self.tokens.borrow().access_token.clone();
+        self.renew(|stored| {
+            stored.access_token == presented || stored.access_expired(oauth::now_unix())
+        })
+    }
+
+    /// Renew now, whatever the stored access token's state: `auth refresh`.
+    pub fn refresh_now(&self) -> Result<(), CliError> {
+        self.renew(|_| true)
+    }
+
     /// Trade the refresh token for a new access token and persist the result.
     ///
     /// Persisting matters: the next invocation is a separate process, and a
     /// refresh whose result was never written would make every command pay for
     /// its own refresh — burning requests and, worse, hiding the fact that the
     /// seven-day refresh window is running out.
-    fn refresh(&self) -> Result<(), CliError> {
-        let now = oauth::now_unix();
-        let (refresh_token, refresh_deadline) = {
-            let t = self.tokens.borrow();
-            (t.refresh_token.clone(), t.refresh_expires_at)
-        };
-        if now >= refresh_deadline {
-            return Err(CliError::Auth(
-                "the Schwab refresh token has expired (they last 7 days and refreshing does \
-                 not extend them) — run `schw auth login` to authorize again in a browser"
-                    .into(),
-            ));
-        }
-        let fresh = oauth::refresh_tokens(
-            &self.http,
-            &self.base_url,
-            &self.app,
-            &refresh_token,
-            now,
-            refresh_deadline,
+    fn renew(&self, due: impl FnOnce(&TokenSet) -> bool) -> Result<(), CliError> {
+        let fresh = renew_session(
+            &RefreshLock::for_binary(crate::BIN)?,
+            || credential::read_tokens(self.creds),
+            due,
+            |stored| {
+                let fresh = oauth::refresh_tokens(
+                    &self.http,
+                    &self.base_url,
+                    &self.app,
+                    &stored.refresh_token,
+                    oauth::now_unix(),
+                    stored.refresh_expires_at,
+                )?;
+                if self.verbose {
+                    eprintln!("access token refreshed");
+                }
+                Ok(fresh)
+            },
+            |fresh| credential::write_tokens(self.creds, fresh),
         )?;
-        credential::write_tokens(self.creds, &fresh)?;
         *self.tokens.borrow_mut() = fresh;
-        if self.verbose {
-            eprintln!("access token refreshed");
-        }
         Ok(())
     }
+}
+
+/// One renewal, safe against every other `schw` process over this keychain item.
+/// The session is read again under the lock, so a grant always presents the newest
+/// refresh token and checks the newest deadline, and `due` can see that another
+/// process renewed while this one waited: then there is no grant, and its tokens
+/// are the answer. `store` runs before the lock is released, which is what the next
+/// process reads.
+fn renew_session(
+    lock: &RefreshLock,
+    read: impl FnOnce() -> Result<Option<TokenSet>, CliError>,
+    due: impl FnOnce(&TokenSet) -> bool,
+    grant: impl FnOnce(&TokenSet) -> Result<TokenSet, CliError>,
+    store: impl FnOnce(&TokenSet) -> Result<(), CliError>,
+) -> Result<TokenSet, CliError> {
+    lock.renew(
+        // Logged out while this process waited: there is nothing to renew.
+        || read()?.ok_or_else(|| CliError::Auth("not logged in — run `schw auth login`".into())),
+        due,
+        |stored| {
+            if stored.refresh_expired(oauth::now_unix()) {
+                return Err(CliError::Auth(
+                    "the Schwab refresh token has expired (they last 7 days and refreshing does \
+                     not extend them) — run `schw auth login` to authorize again in a browser"
+                        .into(),
+                ));
+            }
+            let fresh = grant(&stored)?;
+            store(&fresh)?;
+            Ok(fresh)
+        },
+    )
 }
 
 /// Map a response onto the exit-code contract, preferring Schwab's own message
@@ -265,6 +308,158 @@ fn error_message(body: &Value) -> Option<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::path::{Path, PathBuf};
+    use std::sync::{Arc, Barrier, Mutex};
+
+    fn session(refresh: &str, refresh_expires_at: u64) -> TokenSet {
+        TokenSet {
+            access_token: format!("dummy-access-for-{refresh}"),
+            refresh_token: refresh.into(),
+            expires_at: 0,
+            refresh_expires_at,
+            scope: None,
+        }
+    }
+
+    const STILL_VALID: u64 = u64::MAX;
+
+    fn lock_path(dir: &Path) -> PathBuf {
+        dir.join("token-refresh.lock")
+    }
+
+    /// Two processes' worth of contenders: each has its own open of the lock
+    /// file, which is what contends, and both saw the same access token expire.
+    /// Offline, with the keychain and the token endpoint stood in for.
+    #[test]
+    fn two_contenders_post_one_grant_and_both_use_its_tokens() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = lock_path(dir.path());
+        let stored = Arc::new(Mutex::new(session("dummy-refresh-1", STILL_VALID)));
+        let grants = Arc::new(Mutex::new(Vec::new()));
+        let start = Arc::new(Barrier::new(2));
+        let presented = "dummy-access-for-dummy-refresh-1";
+        let contenders: Vec<_> = (0..2)
+            .map(|_| {
+                let (path, stored, grants, start) = (
+                    path.clone(),
+                    Arc::clone(&stored),
+                    Arc::clone(&grants),
+                    Arc::clone(&start),
+                );
+                std::thread::spawn(move || {
+                    start.wait();
+                    renew_session(
+                        &RefreshLock::at(path),
+                        || Ok(Some(stored.lock().unwrap().clone())),
+                        |latest| latest.access_token == presented,
+                        |latest| {
+                            grants.lock().unwrap().push(latest.refresh_token.clone());
+                            std::thread::sleep(Duration::from_millis(100));
+                            Ok(session("dummy-refresh-2", STILL_VALID))
+                        },
+                        |fresh| {
+                            *stored.lock().unwrap() = fresh.clone();
+                            Ok(())
+                        },
+                    )
+                })
+            })
+            .collect();
+        for contender in contenders {
+            let used = contender.join().unwrap().unwrap();
+            assert_eq!(used.refresh_token, "dummy-refresh-2");
+        }
+        assert_eq!(*grants.lock().unwrap(), ["dummy-refresh-1"]);
+    }
+
+    #[test]
+    fn a_session_another_process_renewed_is_used_without_a_grant() {
+        let dir = tempfile::tempdir().unwrap();
+        let used = renew_session(
+            &RefreshLock::at(lock_path(dir.path())),
+            || Ok(Some(session("dummy-refresh-2", STILL_VALID))),
+            |_| false,
+            |_| panic!("another process renewed: no grant"),
+            |_| panic!("nothing new to store"),
+        )
+        .unwrap();
+        assert_eq!(used.refresh_token, "dummy-refresh-2");
+    }
+
+    /// What is stored decides, not what this process read at startup: a login in
+    /// another process may have replaced the session and restarted its 7 days.
+    #[test]
+    fn the_grant_presents_the_stored_token_and_stores_the_result() {
+        let dir = tempfile::tempdir().unwrap();
+        let stored = Mutex::new(None);
+        let used = renew_session(
+            &RefreshLock::at(lock_path(dir.path())),
+            || Ok(Some(session("dummy-refresh-from-a-new-login", STILL_VALID))),
+            |_| true,
+            |latest| {
+                assert_eq!(latest.refresh_token, "dummy-refresh-from-a-new-login");
+                Ok(session("dummy-refresh-2", STILL_VALID))
+            },
+            |fresh| {
+                *stored.lock().unwrap() = Some(fresh.refresh_token.clone());
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(used.refresh_token, "dummy-refresh-2");
+        assert_eq!(stored.lock().unwrap().as_deref(), Some("dummy-refresh-2"));
+    }
+
+    #[test]
+    fn an_expired_refresh_token_is_an_auth_error_and_no_grant() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = renew_session(
+            &RefreshLock::at(lock_path(dir.path())),
+            || Ok(Some(session("dummy-refresh-1", 0))),
+            |_| true,
+            |_| panic!("past the deadline: no grant"),
+            |_| panic!("nothing to store"),
+        )
+        .unwrap_err();
+        assert_eq!(err.exit_code(), 3);
+        assert!(err.to_string().contains("schw auth login"), "{err}");
+    }
+
+    #[test]
+    fn a_logout_while_waiting_is_an_auth_error_and_no_grant() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = renew_session(
+            &RefreshLock::at(lock_path(dir.path())),
+            || Ok(None),
+            |_| panic!("logged out: nothing to judge"),
+            |_| panic!("logged out: no grant"),
+            |_| panic!("logged out: nothing to store"),
+        )
+        .unwrap_err();
+        assert_eq!(err.exit_code(), 3);
+        assert!(err.to_string().contains("not logged in"), "{err}");
+    }
+
+    #[test]
+    fn a_held_lock_is_a_bounded_error_and_no_grant() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = lock_path(dir.path());
+        RefreshLock::at(&path)
+            .hold(|| {
+                let err = renew_session(
+                    &RefreshLock::at(&path).wait_at_most(Duration::from_millis(100)),
+                    || panic!("no read without the lock"),
+                    |_| panic!("nothing to judge"),
+                    |_| panic!("no grant without the lock"),
+                    |_| panic!("nothing to store"),
+                )
+                .unwrap_err();
+                assert_eq!(err.exit_code(), 5);
+                assert!(err.to_string().contains("try again"), "{err}");
+                Ok(())
+            })
+            .unwrap();
+    }
 
     #[test]
     fn the_documented_error_shape_is_read_for_its_message() {
