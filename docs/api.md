@@ -359,8 +359,8 @@ session again after a logout. A login checks the lock before it asks a person fo
 anything. A login whose redirected URL is piped in or read from the environment only
 refuses an unusable lock and does not wait on a busy one, because the code in that
 URL lasts about 30 s; its write still waits. `auth logout --forget` removes the app
-credential and config before the session, so the lock cannot keep them on the
-machine.
+credential, the connector's bearer token and the config before the session, so the lock
+cannot keep them on the machine.
 
 What this protects is two copies both renewing, for example two commands an agent
 runs at once. Schwab documents no revocation on reuse of a refresh token, and none

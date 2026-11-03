@@ -240,7 +240,7 @@ fn auth(
                 // queue, so throwing one away has to be asked for explicitly.
                 args.forget,
                 || creds.delete(KEYCHAIN_APP).map(drop),
-                || creds.delete(MCP_TOKEN_ACCOUNT).map(drop),
+                || creds.delete(pk_cli_mcp::HTTP_TOKEN_ACCOUNT).map(drop),
                 || store.clear().map(drop),
                 // The delete runs with or without the lock; a renewal in flight
                 // must not store the session again behind it.
@@ -255,8 +255,8 @@ fn auth(
                 }
             } else if !cli.common.quiet {
                 eprintln!(
-                    "session cleared. The app key/secret are still stored — \
-                     use `schw auth logout --forget` to remove them too."
+                    "session cleared. The app key/secret and the connector token are still \
+                     stored — use `schw auth logout --forget` to remove them too."
                 );
             }
             Ok(())
@@ -412,9 +412,6 @@ fn open_browser(url: &str, quiet: bool) {
         eprintln!("could not open a browser automatically — open the URL above by hand");
     }
 }
-
-/// The keychain item `mcp --new-token` saves the `--http` bearer token in.
-const MCP_TOKEN_ACCOUNT: &str = "mcp-http-token";
 
 /// `auth logout`'s removals. `--forget`'s come first and none stops another: the
 /// session's delete can wait on the token-refresh lock, and neither a busy lock nor

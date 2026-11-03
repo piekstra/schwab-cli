@@ -12,6 +12,7 @@ signal.
   anyone to a release that lacks their platform. A build that failed leaves a draft.
 - A release runs the binaries its runner can execute before packing them, so one that
   builds and then fails at startup is not published.
+- cli-common v0.22.0, up from v0.21.0.
 
 ## 0.2.0 — 2026-11-03
 
