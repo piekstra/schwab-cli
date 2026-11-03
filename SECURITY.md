@@ -19,6 +19,10 @@ protecting:
 - **The OAuth tokens.** Stored under the same service, account `oauth-tokens`.
   The access token lasts ~30 minutes; **the refresh token is a 7-day key to the
   account** and is the most valuable secret this tool holds.
+- **The `--http` bearer token**, only if you use `schw mcp --http`. Stored under the
+  same service, account `mcp-http-token`, or set as `$SCHW_MCP_TOKEN`; **a copy lives
+  in your Cloudflare Worker**, as its `HOME_SCHWAB_TOKEN` secret. It admits a caller to
+  the read-only tools. See [The MCP server](#the-mcp-server).
 - **Not a secret:** `~/.config/schw/token-refresh.lock` is an empty file. `schw`
   processes lock it while renewing the session, so two running copies do not
   renew at the same time. That holds once every copy sharing the keychain item
@@ -28,8 +32,9 @@ protecting:
   never as a flag value — argv is visible in the process table and in shell
   history.
 - **The account data itself.** Not a credential, but a complete record of
-  someone's holdings and trading. It goes to stdout and nowhere else: no
-  telemetry, no caching to disk, no third parties.
+  someone's holdings and trading. The commands send it to stdout and nowhere else: no
+  telemetry, no caching to disk, no third parties. `schw mcp` sends it to the MCP
+  client that called it, which is the point; see [The MCP server](#the-mcp-server).
 
 `AppCredential` and `TokenSet` both implement `Debug` **by hand** so a stray
 `{:?}` cannot print key or token material, and a test asserts it. Account keys
@@ -40,7 +45,8 @@ are masked to their last four characters wherever displayed.
 - **It never writes.** No orders, no order cancellation, no transfers, no
   profile edits. This is enforced in code, not just documented: `client::Schwab`
   exposes no HTTP verb but `GET`, and the `api` passthrough refuses every other
-  verb with exit code 6. There is no code path that can POST.
+  verb with exit code 6. The only POST in this binary is `oauth.rs`'s, to the token
+  endpoint, at sign-in and renewal.
 
   This matters more here than for most providers. Schwab's Trader API places
   live orders at the same host, with the same bearer token, that the reads use.
@@ -51,6 +57,57 @@ are masked to their last four characters wherever displayed.
   something else, that is where your requests go — and your tokens with them.
 - It hardcodes no secrets. `gitleaks` runs in CI over the full history, and a
   test refuses credential-shaped strings in the fixtures.
+
+## The MCP server
+
+`schw mcp` serves two read-only tools to an MCP client (Claude Code, Claude Desktop)
+over stdio; the server opens no port unless run with `--http` (below). **What the tools
+return goes to Claude on every path**, as part of your conversation: account types and
+the last four digits of their numbers, equity, cash, positions, and transactions with
+their amounts and descriptions. No tool returns a full account number or an account
+hash.
+
+No tool can place, change or cancel an order, move money or change anything at Schwab.
+A tool reaches Schwab only through a seam with `get` and nothing else, over a client
+with no other verb. Every path is built from fixed constants and a hash from Schwab's
+own account list; an `account` argument only selects from that list, so what a model
+passes cannot name another endpoint, even for a read. `--allow-writes` adds nothing,
+since every tool is read-only. `src/mcp/tests.rs` holds all of this to the requests the
+tools actually make.
+
+The server reads the config and both keychain items on each call and holds no token
+between calls, so a sign-in or a renewal by another `schw` applies on the next call. A
+renewal it does itself is under the same lock as every other `schw`. It sends `base_url`
+the tokens and the app secret as the commands do, from your own config file in
+`~/.config/schw`; nothing in a working directory is read. A tool never signs in, prompts
+or creates a keychain item: a missing or dead session is an error asking the user to
+run `schw auth login --overwrite` in a terminal, or `schw auth set-credential --stdin
+--overwrite` when the app registration is what is missing or refused. The Claude Desktop
+extension (`.mcpb`) takes no settings and so holds no credential of its own; on macOS its
+bundled binary needs the user's approval, once per item, to read the `piekstra.schw`
+keychain items.
+
+`schw mcp --http --port <PORT>` serves the same tools over HTTP for the user's own
+Cloudflare Worker, which reaches it through the user's own Cloudflare Tunnel
+(cli-common's `connector/`). It binds 127.0.0.1 only, with no flag for another address,
+and refuses to start without a bearer token of 32 or more characters, from
+`SCHW_MCP_TOKEN` or the keychain item `mcp-http-token` (`piekstra.schw`), which `schw mcp
+--new-token` makes from 256 random bits and replaces only with `--overwrite`. Every
+request must carry the token (compared in constant time) and a `Host` of `127.0.0.1` or
+`localhost`, and must not carry an `Origin`; there are no CORS headers. The Schwab
+tokens and app secret stay on your computer: the Worker sends tool calls and receives
+results, and never sees them.
+
+**Tool results also cross Cloudflare on this path**, through your tunnel and your
+Worker, on their way to Claude. Who holds what, and what a leaked token can do, is in
+the connector's
+[threat model](https://github.com/piekstra/cli-common/blob/main/connector/README.md#threat-model).
+
+`schw auth logout` removes the Schwab session and does not touch `mcp-http-token` or
+stop `schw mcp --http`. To revoke the connector's access, run `schw mcp --new-token
+--overwrite` and restart the server (`launchctl kickstart -k gui/$(id -u)/com.piekstra.schw-mcp-http`);
+the old token works until the restart. To stop serving, run `launchctl bootout
+gui/$(id -u)/com.piekstra.schw-mcp-http` and stop the tunnel.
 
 ## A note on scope
 

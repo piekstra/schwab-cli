@@ -1,6 +1,6 @@
 # Test fixtures
 
-**These are scrubbed live captures** (with two documented exceptions below).
+**These are scrubbed live captures** (with the documented exceptions below).
 
 Capture date: **2026-08-12**, against a real individual Trader API app in
 `Ready For Use` state, over two linked accounts (one CASH, one MARGIN, the
@@ -38,6 +38,8 @@ fixtures now encode:
   field set (`access_token`, `refresh_token`, `expires_in`, `token_type`,
   `scope`, `id_token`) matches what the live login and refresh of 2026-08-12
   parsed successfully.
+- **`positions_margin.json`** — built by hand for `schw mcp`'s tests, in the shape of
+  the captured `positions.json`, for the second account in `account_numbers.json`.
 - The **short position** row in `positions.json` — no live short position
   existed to capture; its `short*` field spellings are doc-derived, mirrored
   from the captured long row's structure.
@@ -72,6 +74,7 @@ commit. Never commit a raw capture.
 | `account_numbers.json` | `GET /trader/v1/accounts/accountNumbers` |
 | `accounts.json` | `GET /trader/v1/accounts` (balances) |
 | `positions.json` | `GET /trader/v1/accounts/{hash}?fields=positions` |
+| `positions_margin.json` | the same, for the margin account |
 | `transactions.json` | `GET /trader/v1/accounts/{hash}/transactions` (TRADE + dividend rows) |
 | `token_response.json` | `POST /v1/oauth/token` success body |
 | `error_401.json` | a rejected-token error body |

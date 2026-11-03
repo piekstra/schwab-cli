@@ -11,7 +11,8 @@
 //! `docs/api.md` marks what that run covered as **[live]**; everything else is
 //! documented-only. Among what it did not cover: a 401 response body, a short
 //! position, how far back transaction history reaches, and renewal under the
-//! token-refresh lock, which arrived in 0.1.3, after that run.
+//! token-refresh lock, which arrived in 0.1.3, after that run, and `schw mcp`,
+//! which arrived in 0.2.0.
 
 use std::io::IsTerminal;
 
@@ -30,6 +31,7 @@ use schw::client::Schwab;
 use schw::commands::{accounts, api, positions, transactions, Ctx, ACCOUNT_NUMBERS};
 use schw::config::{self, Config, KEYCHAIN_APP, KEYCHAIN_TOKENS};
 use schw::credential::{self, AppCredential};
+use schw::mcp::{LiveSource, SchwabTools};
 use schw::{oauth, BIN};
 
 const REPO: &str = "piekstra/schwab-cli";
@@ -66,6 +68,13 @@ enum Command {
     Transactions(transactions::Cmd),
     /// Raw Schwab API passthrough (GET only — this CLI is read-only).
     Api(ApiArgs),
+    /// Serve read-only Schwab tools to Claude over MCP (stdio, or --http).
+    ///
+    /// For Claude Code (`claude mcp add schwab -- schw mcp`), Claude Desktop and
+    /// any MCP client. With --http, on 127.0.0.1 behind a bearer token, for your
+    /// own Cloudflare Worker (see README). No tool can place, change or cancel
+    /// an order or move money.
+    Mcp(pk_cli_mcp::McpArgs),
     /// Update to the latest release from GitHub.
     SelfUpdate(SelfUpdateArgs),
     /// Print a shell completion script.
@@ -138,7 +147,6 @@ fn main() {
 }
 
 fn run(cli: &Cli) -> Result<(), CliError> {
-    let store = ConfigStore::new(BIN);
     // `SCHW_KEYCHAIN_SERVICE` exists for the test suite: pointing it at a
     // service that holds nothing keeps the suite hermetic on a machine where a
     // real app credential and session are stored. Reading a *missing* keychain
@@ -152,6 +160,13 @@ fn run(cli: &Cli) -> Result<(), CliError> {
         Ok(service) if !service.is_empty() => CredentialStore::new(service),
         _ => CredentialStore::for_binary(BIN),
     };
+    // Before the config is read: listing the tools reads no file, and a running
+    // server reads it on each call, so a later `config set` applies and a
+    // malformed file is one tool's error rather than no server.
+    if let Command::Mcp(args) = &cli.command {
+        return pk_cli_mcp::run(args, SchwabTools::new(LiveSource::new(creds)));
+    }
+    let store = ConfigStore::new(BIN);
     let cfg: Config = store.load()?;
     let ctx = Ctx {
         common: &cli.common,
@@ -166,13 +181,19 @@ fn run(cli: &Cli) -> Result<(), CliError> {
         Command::Positions(cmd) => positions::run(&ctx, cmd),
         Command::Transactions(cmd) => transactions::run(&ctx, cmd),
         Command::Api(args) => api::run(&ctx, args),
+        Command::Mcp(_) => unreachable!("served before the config is read"),
         Command::SelfUpdate(args) => Updater {
             repo: REPO.into(),
             binary: BIN.into(),
             target: env!("BUILD_TARGET").into(),
             current: env!("CARGO_PKG_VERSION").into(),
         }
-        .run(args, cli.common.json, cli.common.quiet),
+        .run_noting(
+            args,
+            cli.common.json,
+            cli.common.quiet,
+            &pk_cli_mcp::restart_note(BIN),
+        ),
         Command::Completions { shell } => {
             clap_complete::generate(*shell, &mut Cli::command(), BIN, &mut std::io::stdout());
             Ok(())
@@ -192,7 +213,7 @@ fn run(cli: &Cli) -> Result<(), CliError> {
                     method: "oauth2".into(),
                     login_hint: Some(format!("{BIN} auth login")),
                 },
-                &["accounts", "positions", "transactions", "api"],
+                &["accounts", "positions", "transactions", "api", "mcp"],
             );
             output::json(&serde_json::to_value(&info).unwrap());
             Ok(())

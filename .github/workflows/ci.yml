@@ -51,7 +51,9 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --all
-      - run: cargo build --release
+      # `cargo test` cannot see a runtime clap panic in the release binary, and
+      # this is where `mcp --list-tools` runs on every push.
+      - run: make smoke
 
   security:
     name: audit / deny / secrets

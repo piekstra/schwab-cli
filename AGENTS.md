@@ -7,7 +7,7 @@ Canonical guide for anyone — human or agent — working in this repo.
 `schw`, a piekstra-family CLI over Charles Schwab's Trader API
 (`api.schwabapi.com`). Read-only. Conforms to
 [piekstra-cli/1](https://github.com/piekstra/cli-common); the shared crates are
-pinned to tag `v0.20.0`.
+pinned to tag **v0.21.0**.
 
 ## The five facts that shape everything here
 
@@ -43,6 +43,8 @@ pinned to tag `v0.20.0`.
 | `src/parse.rs` | Schwab JSON → DTOs; every function total |
 | `src/urlenc.rs` | percent encode/decode; the authorization-code trap lives here |
 | `src/commands/` | one module per command group |
+| `src/mcp.rs` | `schw mcp`: two read-only tools over a `Reads` seam with `get` and nothing else (`LiveSource` on Schwab, fixtures in `src/mcp/tests.rs`) |
+| `packaging/mcpb/manifest.json` | the Claude Desktop extension; `tests/packaging.rs` holds it to the binary |
 | `docs/api.md` | **the source of truth for API facts**, every claim cited |
 
 ## Conventions
@@ -146,11 +148,19 @@ doc-derived, and the scrubbing policy, and a test enforces the dummy shapes.
 If you refresh them from new captures, scrub them and update that file in the
 same commit. Never commit a raw capture.
 
-## Read-only, in three places that must agree
+## Read-only, in four places that must agree
 
-`client::Schwab` (no verb but `GET`), the `schw api` verb guard (exit 6), and
-the claims in `README.md`/`AGENTS.md`. Schwab's write endpoints place real
-orders with real money on the same host and token. Change one, change all three.
+`client::Schwab` (no verb but `GET`), the `schw api` verb guard (exit 6), `schw
+mcp`'s tools (`src/mcp.rs`: a `Reads` seam with `get` alone, paths built only from
+`commands`' constants and hashes from Schwab's own account list, an `account`
+argument that selects from that list and never reaches a path), and the claims in
+`README.md`/`AGENTS.md`/`SECURITY.md`. Schwab's write endpoints place real orders
+with real money on the same host and token. Change one, change all four.
+
+`src/mcp/tests.rs` holds the tools to this: every request any tool makes is on a
+list of four reads, a hostile `account` reaches no other path, and no definition
+speaks of the order surface. Keep the word out of tool definitions rather than
+loosening that test.
 
 ## Definition of done
 

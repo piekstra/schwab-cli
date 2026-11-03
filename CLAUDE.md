@@ -6,8 +6,8 @@ layout, the OAuth model, the conventions, and Schwab's traps.
 Claude-specific notes:
 
 - **`make verify` is the gate.** Run it before calling a change done. It runs
-  `fmt-check`, `clippy -D warnings`, the tests and `smoke`. CI runs all of that
-  except `smoke`, plus a release build and an audit / deny / gitleaks job.
+  `fmt-check`, `clippy -D warnings`, the tests and `smoke`. CI runs all of that,
+  plus an audit / deny / gitleaks job.
   `smoke` reads only the empty `piekstra.schw.hermetic-tests` keychain service,
   never the real entries.
 - **Live verification happened once, on 2026-08-12** — auth, refresh, and the

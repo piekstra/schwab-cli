@@ -140,6 +140,7 @@ error* — see `docs/api.md` §5.
 | `positions list` | open positions |
 | `transactions list` | transaction history |
 | `api GET <PATH>` | raw passthrough |
+| `mcp` | serve read-only tools to Claude ([below](#use-with-claude)) |
 | `self-update`, `completions`, `info` | family standard |
 
 Exit codes: `0` ok · `2` usage · `3` auth · `4` not found · `5` upstream ·
@@ -154,15 +155,111 @@ reads, so the guarantee is structural:
 
 - `client::Schwab` exposes no HTTP verb but `GET`. There is no method to call.
 - `schw api` refuses every verb but `GET`, with exit code 6.
-- A test asserts both.
+- `schw mcp`'s tools reach Schwab through a seam with `get` alone, on paths built
+  from fixed constants and the hashes in Schwab's own account list.
+- Tests assert all three.
 
-Changing any one of those means changing all three, in the same commit.
+Changing any one of those means changing all of them, in the same commit.
+
+## Use with Claude
+
+`schw mcp` serves two read-only tools over MCP, so Claude can answer questions
+about your own Schwab accounts. There is no hosted service: the tools run on your
+computer, in your copy of `schw`, and call Schwab's API with the session in your OS
+keychain.
+
+| Tool | Answers |
+| --- | --- |
+| `schwab_portfolio` | What do I hold at Schwab, and what is it worth? Each account's equity and cash, and the positions, narrowed by `account` or `symbol` (a symbol also matches options on it) |
+| `schwab_transactions` | What happened over a period? Trades, dividends, deposits and withdrawals by `since`/`until` (year to date by default, 24 months at most), `account`, `type` (`TRADE`, `DIVIDEND_OR_INTEREST`, …) and `symbol`; every linked account unless `account` names one |
+
+No tool can place, change or cancel an order, move money or change anything: there
+is no such tool, the tools have no verb but `GET`, and `--allow-writes` adds nothing.
+Schwab's API has no tax documents, cost basis or realized gains, so neither do the
+tools.
+
+Results are concise by default (`response_format: "detailed"` adds each transaction's
+legs and fees, and provider detail), 25 records a page with a cursor for more, and
+never larger than about 32,000 characters. An account goes by its type and last four
+digits (`MARGIN …1234`); no result carries the full number or the hash. A transaction
+list that Schwab's per-response cap cut short says `complete: false`, and one reaching
+back more than 12 months carries a `note`, because Schwab returns less without an
+error when its history runs out. Each page reads Schwab again, so a row posted between
+pages can repeat or be skipped: for a total, read the range in one call, with `limit` up
+to 200. Descriptions come from Schwab and other parties; the server tells Claude to
+treat them as data, not instructions.
+
+The tools are worded for a model, so two things differ from `--json`. Amounts are plain
+decimal strings, with `unrealized_gain`, `day_gain` and `amount` where `positions --json`
+and `transactions list --json` have `open_pl`, `day_pl` and `net_amount`. And
+`schwab_transactions` covers every type unless `type` names one, where `schw transactions
+list` covers `TRADE` unless `--all-types` is passed.
+
+**Sign in first.** Sign-in is through a browser, so no settings form can hold it. Run
+`schw auth set-credential --stdin` and `schw auth login` in a terminal (see
+[Setup](#setup)). Both ways of connecting Claude below then use that session
+from the OS keychain (service `piekstra.schw`), and renew the access token in place, as
+the commands do, under the same lock as every other `schw`. Schwab ends a session after
+7 days, whatever you do: the tools then say so and ask you to run `schw auth login
+--overwrite` in a terminal. They never sign in by themselves.
+
+**Claude Code.** Add the `schwab-cli` plugin from the
+[piekstra plugin marketplace](https://github.com/piekstra/claude-plugins):
+
+```console
+$ claude plugin marketplace add piekstra/claude-plugins
+$ claude plugin install schwab-cli@piekstra-plugins
+```
+
+or register the server yourself:
+
+```console
+$ claude mcp add schwab -- schw mcp
+```
+
+**Claude Desktop.** Download `schw-<version>.mcpb` from the
+[latest release](https://github.com/piekstra/schwab-cli/releases/latest) and open it.
+It asks for nothing: the bundled `schw` reads what your installed `schw` stored. On
+macOS the bundled binary is a different program to the keychain, so its first call
+raises a keychain prompt for each `piekstra.schw` item; choose **Always Allow**, or
+every call will ask again.
+
+Any other MCP client that launches a local server can run `schw mcp`.
+
+**Claude on the web and mobile.** claude.ai reaches tools through a remote connector,
+and your Schwab session stays on your computer, so `schw` serves the same tools from
+your computer to a connector you deploy into your own Cloudflare account:
+
+```console
+$ schw mcp --new-token            # once: a bearer token, saved in the keychain and printed for the Worker
+$ schw mcp --http --port 8736     # serve on 127.0.0.1 only
+```
+
+The connector, [cli-common's `connector/`](https://github.com/piekstra/cli-common/tree/main/connector#tools-from-your-computer-home-modules),
+reaches that port through a Cloudflare Tunnel in your account; its README walks through
+the tunnel, the VPC service, a launchd agent that keeps the server running, and the
+`HOME_SCHWAB_TOKEN` secret, with the threat model. `--http` binds 127.0.0.1 only,
+refuses to start without the token, refuses any request whose `Host` is not loopback
+or that carries an `Origin`, and serves the read-only tools only. The Schwab session
+never leaves your computer, but tool results do: your balances, positions and
+transactions pass through Cloudflare and reach Claude ([`SECURITY.md`](SECURITY.md)).
+While the computer sleeps, the tools answer that it is offline.
+
+After `schw self-update`, restart the server: a running one keeps the old code, and its
+launchd agent restarts it only when it exits. Its start line names the version.
+
+```console
+$ launchctl kickstart -k gui/$(id -u)/com.piekstra.schw-mcp-http
+```
+
+`self-update` does not reach a Claude Desktop extension, which runs its own copy.
+Install the new release's `.mcpb` too.
 
 ## Security
 
-Secrets live only in the macOS/Linux keychain under `piekstra.schw`, in two
-entries: the app key/secret, and the OAuth tokens. Never on argv, never in a
-file, never in a log. `--verbose` prints method, path, and query parameters —
+Secrets live in the macOS/Linux keychain under `piekstra.schw`, in two entries: the
+app key/secret, and the OAuth tokens (`schw mcp --http` adds a bearer token, which can
+also come from `$SCHW_MCP_TOKEN`). Never on argv, never in a file, never in a log. `--verbose` prints method, path, and query parameters —
 never the token. See [`SECURITY.md`](SECURITY.md).
 
 `make install` re-signs the binary with a stable code identity so macOS
@@ -176,8 +273,8 @@ $ make verify     # fmt-check + clippy -D warnings + tests + smoke — the local
 $ make test       # fully offline: no network, no credential, never the real keychain entries
 ```
 
-CI runs the same fmt check, clippy, tests and release build, but not `smoke`,
-plus a cargo-audit / cargo-deny / gitleaks job. `smoke` never reads the real
+CI runs the same fmt check, clippy, tests and `smoke`, which builds the release
+binary, plus a cargo-audit / cargo-deny / gitleaks job. `smoke` never reads the real
 keychain entries.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`AGENTS.md`](AGENTS.md).

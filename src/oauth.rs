@@ -152,7 +152,8 @@ fn post_token(
         .header("Content-Type", "application/x-www-form-urlencoded")
         .header("Accept", "application/json")
         .form(form)
-        .send()?;
+        .send()
+        .map_err(crate::client::network_failure)?;
     token_response(resp)
 }
 
@@ -224,12 +225,18 @@ pub fn explain_oauth_error(slug: &str, detail: Option<&str>, status: u16) -> Str
         }
         _ => "Schwab's token endpoint refused the request.",
     };
-    match (slug.is_empty(), detail) {
-        (false, Some(d)) => format!("{base} [{slug}: {d}] (HTTP {status})"),
-        (false, None) => format!("{base} [{slug}] (HTTP {status})"),
-        (true, Some(d)) => format!("{base} [{d}] (HTTP {status})"),
-        (true, None) => format!("{base} (HTTP {status})"),
-    }
+    let said = match (slug.is_empty(), detail) {
+        (false, Some(d)) => format!("{base} [{slug}: {d}]"),
+        (false, None) => format!("{base} [{slug}]"),
+        (true, Some(d)) => format!("{base} [{d}]"),
+        (true, None) => base.to_string(),
+    };
+    crate::client::with_status(&said, status)
+}
+
+/// Whether a message from [`explain_oauth_error`] is about this slug.
+pub fn is_oauth_error(message: &str, slug: &str) -> bool {
+    message.contains(&format!("[{slug}"))
 }
 
 /// Build a [`TokenSet`] from a token response body.

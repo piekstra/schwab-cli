@@ -399,14 +399,14 @@ prior in-house work against Schwab's own OpenAPI document.
 
 | Method | Path | `schw` |
 |---|---|---|
-| GET | `/trader/v1/accounts/accountNumbers` | `accounts list` |
-| GET | `/trader/v1/accounts` (`?fields=positions`) | `accounts list` |
-| GET | `/trader/v1/accounts/{hash}` (`?fields=positions`) | `positions list` |
+| GET | `/trader/v1/accounts/accountNumbers` | `accounts list`, `mcp` |
+| GET | `/trader/v1/accounts` (`?fields=positions`) | `accounts list`, `mcp` |
+| GET | `/trader/v1/accounts/{hash}` (`?fields=positions`) | `positions list`, `mcp` |
 | GET | `/trader/v1/accounts/{hash}/orders` | — |
 | POST/PUT/DELETE | `…/orders…` | **never** (read-only) |
 | GET | `/trader/v1/orders` | — |
 | POST | `/trader/v1/accounts/{hash}/previewOrder` | **never** |
-| GET | `/trader/v1/accounts/{hash}/transactions` | `transactions list` |
+| GET | `/trader/v1/accounts/{hash}/transactions` | `transactions list`, `mcp` |
 | GET | `/trader/v1/accounts/{hash}/transactions/{id}` | — |
 | GET | `/trader/v1/userPreference` | — |
 
