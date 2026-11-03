@@ -134,7 +134,7 @@ error* — see `docs/api.md` §5.
 | `auth login` | browser authorization; `--print-url` for the two-step form |
 | `auth status` | credential + session state, offline |
 | `auth refresh` | renew the access token now |
-| `auth logout [--forget]` | clear session; `--forget` also drops the app credential |
+| `auth logout [--forget]` | clear session; `--forget` also drops the app credential and the connector's bearer token |
 | `config path\|show\|set\|unset` | `base_url`, `redirect_uri`, `account` |
 | `accounts list` | linked accounts and hashes |
 | `positions list` | open positions |
