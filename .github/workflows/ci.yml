@@ -34,9 +34,11 @@ jobs:
     # scoped to the code signature) is never exercised in CI. It's covered by
     # local dogfooding through the signed binary instead.
     #
-    # SECOND COVERAGE GAP, unavoidable: no live Schwab call runs anywhere —
-    # not here, not locally — because the OAuth app is not approved yet. See
-    # docs/api.md "Verification status".
+    # SECOND COVERAGE GAP, unavoidable: no live Schwab call runs in CI. A
+    # session needs a person at a browser at least every 7 days (docs/api.md
+    # "The 7-day wall"), so CI never holds one. Live verification ran locally,
+    # once, on 2026-08-12; docs/api.md "Verification status" lists what it
+    # covered, and what it did not cover is documented-only.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -172,9 +172,13 @@ ad-hoc signs and silently revokes them.
 ## Development
 
 ```console
-$ make verify     # fmt-check + clippy -D warnings + tests + smoke — the CI gate
+$ make verify     # fmt-check + clippy -D warnings + tests + smoke — the local gate
 $ make test       # fully offline: no network, no credential, never the real keychain entries
 ```
+
+CI runs the same fmt check, clippy, tests and release build, but not `smoke`,
+plus a cargo-audit / cargo-deny / gitleaks job. `smoke` never reads the real
+keychain entries.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`AGENTS.md`](AGENTS.md).
 

@@ -13,10 +13,11 @@ contribution is licensed under those same terms.
 - **Account numbers and account hashes are both identifiers.** The `hashValue`
   Schwab returns is not an anonymization — it is a stable handle to a specific
   brokerage account. Treat it exactly like an account number.
-- **Fixtures are hand-authored from published docs, with dummy values only.**
-  See [`tests/fixtures/README.md`](tests/fixtures/README.md); a test enforces
-  the rule positively. If you ever replace them with real captures, scrub them
-  and say so there.
+- **Fixtures are scrubbed live captures, with dummy values only.** They were
+  captured on 2026-08-12. [`tests/fixtures/README.md`](tests/fixtures/README.md)
+  has the scrubbing policy and the few shapes that remain doc-derived, and a
+  test enforces the dummy shapes positively. If you refresh them from new
+  captures, scrub them and update that file in the same commit.
 - **Read-only by default.** Every command observes. Schwab's Trader API can
   place and cancel live orders; the guarantee that this tool cannot lives in
   `client::Schwab` (no verb but GET), the `api` verb guard, and the docs — all
@@ -30,13 +31,17 @@ contribution is licensed under those same terms.
 ## Dev loop
 
 ```console
-$ make verify     # fmt-check + clippy -D warnings + tests + smoke — the CI gate
+$ make verify     # fmt-check + clippy -D warnings + tests + smoke — the local gate
 $ make test       # unit + integration (fully offline; no network, no creds, never the real keychain)
 $ make dev        # debug build, re-signed so keychain grants survive rebuilds
 $ cargo run -- <command>
 ```
 
-`make verify` is exactly what CI runs; a green local run predicts a green CI run.
+CI (`.github/workflows/ci.yml`) runs `cargo fmt --check`, clippy with
+`-D warnings`, the tests and a release build, plus a cargo-audit / cargo-deny /
+gitleaks job. It does not run `smoke`. A green `make verify` predicts a green
+build job. `smoke` runs `auth status` against an empty keychain service
+(`piekstra.schw.hermetic-tests`), so it never reads your real entries.
 
 ## Pull requests
 
@@ -51,18 +56,17 @@ $ cargo run -- <command>
 
 ## A note on the current state
 
-**This CLI has never made a live Schwab API call, and cannot yet.** Schwab's
-Trader API requires a registered application that Schwab approves by hand; at
-the time of writing this repo has no approved app, so every line here was
-written from published documentation and prior art rather than from a real
-response. See [`docs/api.md`](docs/api.md) for what that means field by field.
+**This CLI was verified live once, on 2026-08-12.** OAuth login, refresh, and
+every read command ran against a real individual Trader API app and two linked
+accounts, one CASH and one MARGIN. The fixtures are scrubbed from that run's
+captures. [`docs/api.md`](docs/api.md) marks each claim **[live]** or gives its
+documentary source, and §7 keeps the first-live-run checklist with its answers.
 
-If you are the first person to run it against an approved app: please work
-through the verification checklist in [`docs/api.md`](docs/api.md), and turn
-whatever you find into fixtures and doc corrections. Expect to find something —
-a renamed field, a date format that wants milliseconds, a page cap the docs
-don't mention. That first run is the most valuable contribution this repo can
-receive right now.
+Anything `docs/api.md` does not mark **[live]** is documented-only. That
+includes a 401 response body, a short position, how far back transaction
+history reaches, and renewal under the token-refresh lock added in 0.1.3,
+after that run. If you run `schw` against an approved app, settle what you can
+of that and turn what you find into fixtures and doc corrections.
 
 Three things to be careful with when you do:
 
@@ -72,5 +76,7 @@ Three things to be careful with when you do:
   anywhere. The refresh token is a seven-day key to the account.
 - **A silently truncated transaction list is the worst bug here** — it looks
   exactly like success, and it would understate realized gains on a tax return.
-  Schwab caps a transactions query at a bounded window; if you change anything
-  near date-window chunking, check it against an account with a long history.
+  Schwab silently caps a transactions response at 3,000 rows, keeping the
+  newest; if you change anything near date-window chunking or the bisection of
+  a capped window, check it against an account with more than 3,000 rows in a
+  month.

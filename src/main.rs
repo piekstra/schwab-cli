@@ -6,9 +6,12 @@
 //! asserted in the docs. That matters here more than for most providers: the
 //! same host and token that read a position will also place a live order.
 //!
-//! **Nothing in this binary has been run against a real Schwab account.** It
-//! requires an application approved by Schwab, which takes days; see
-//! `docs/api.md`.
+//! **Live-verified once, on 2026-08-12:** OAuth login, refresh, and every read
+//! command ran against a real Trader API app and two real accounts.
+//! `docs/api.md` marks what that run covered as **[live]**; everything else is
+//! documented-only. Among what it did not cover: a 401 response body, a short
+//! position, how far back transaction history reaches, and renewal under the
+//! token-refresh lock, which arrived in 0.1.3, after that run.
 
 use std::io::IsTerminal;
 
