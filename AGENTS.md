@@ -7,7 +7,7 @@ Canonical guide for anyone — human or agent — working in this repo.
 `schw`, a piekstra-family CLI over Charles Schwab's Trader API
 (`api.schwabapi.com`). Read-only. Conforms to
 [piekstra-cli/1](https://github.com/piekstra/cli-common); the shared crates are
-pinned to tag `v0.15.1`.
+pinned to tag `v0.20.0`.
 
 ## The four facts that shape everything here
 
@@ -25,6 +25,11 @@ pinned to tag `v0.15.1`.
 4. **The refresh token dies after 7 days and cannot be renewed.** Every
    unattended-automation idea runs into this wall. It is Schwab policy.
    Live-verified: `auth refresh` does not move the deadline.
+5. **A renewal runs under `pk_cli_auth`'s `RefreshLock`**
+   (`~/.config/schw/token-refresh.lock`, an empty file), so two running copies
+   do not both renew. A login and a logout hold it around their keychain write
+   only, never across the browser. Schwab documents no reuse revocation, so do
+   not claim the lock prevents one. See `docs/api.md`.
 
 ## Layout
 
@@ -33,7 +38,7 @@ pinned to tag `v0.15.1`.
 | `src/main.rs` | clap tree, auth/config commands, exit-code mapping |
 | `src/oauth.rs` | authorization URL, code exchange, refresh, error explanations |
 | `src/credential.rs` | the two keychain entries; hand-written `Debug` impls |
-| `src/client.rs` | GET-only HTTP client, token refresh, status→exit-code mapping |
+| `src/client.rs` | GET-only HTTP client, token refresh under the cross-process lock, status→exit-code mapping |
 | `src/config.rs` | non-secret settings (`base_url`, `redirect_uri`, `account`) |
 | `src/parse.rs` | Schwab JSON → DTOs; every function total |
 | `src/urlenc.rs` | percent encode/decode; the authorization-code trap lives here |
@@ -46,7 +51,8 @@ pinned to tag `v0.15.1`.
   JSON document per invocation. Human output → stdout, diagnostics → stderr.
 - **Validate arguments before touching the keychain or the network.** `--help`
   and a typo must never prompt for keychain access or spend a token.
-- **Exit codes:** 0 ok · 2 usage · 3 auth · 4 not found · 5 upstream · 6 refused.
+- **Exit codes:** 0 ok · 2 usage · 3 auth · 4 not found · 5 upstream, or the
+  token-refresh lock busy past its wait (nothing sent, safe to retry) · 6 refused.
 - **ISO `YYYY-MM-DD` on every date flag.** Schwab's
   `yyyy-MM-dd'T'HH:mm:ss.SSSZ` is an internal detail.
 - **Money as strings**, never floats, per the family output contract.
@@ -122,17 +128,17 @@ Hermeticity is enforced by `SCHW_KEYCHAIN_SERVICE`, which replaces the keychain
 service name (`piekstra.schw`) for one invocation. Every black-box test runs
 through the `schw()` helper in `tests/cli_surface.rs`, which sets it to
 `piekstra.schw.hermetic-tests`, a service that holds nothing, and points
-`XDG_CONFIG_HOME` at a scratch directory. Reading a missing keychain item needs
-no approval, so `auth status` answers logged out on any machine. Without the
+`XDG_CONFIG_HOME` and `HOME` at a scratch directory (the token-refresh lock lives
+under `~/.config/schw` whatever `XDG_CONFIG_HOME` says). Reading a missing keychain
+item needs no approval, so `auth status` answers logged out on any machine. Without the
 override, `cargo test` would open the real entries from an ad-hoc-signed binary,
 a new code identity on every rebuild, raising a macOS keychain prompt per entry
 per run, and `auth status` would report the developer's session. New black-box
 tests go through `schw()`. The variable exists for the suite: it only renames
 the service, carries no key material, and is not a user-facing setting.
 
-`make smoke` is the exception, on purpose: it runs `auth status` from the
-signed release binary against the real keychain, which the grant made for the
-installed `schw` already covers.
+`make smoke` runs `auth status` from the release binary against the same empty
+service, so `make verify` raises no keychain dialog whatever the binary's identity.
 
 Fixtures are **scrubbed live captures** (2026-08-12) —
 `tests/fixtures/README.md` records what was captured, what remains

@@ -10,8 +10,11 @@
 //! requires an application approved by Schwab, which takes days; see
 //! `docs/api.md`.
 
+use std::io::IsTerminal;
+
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
+use pk_cli_auth::refresh_lock::RefreshLock;
 use pk_cli_auth::{AuthStatus, LogoutArgs, SecretSourceArgs, SetCredentialArgs};
 use pk_cli_config::ConfigStore;
 use pk_cli_core::info::{AuthInfo, CliInfo};
@@ -24,9 +27,8 @@ use schw::client::Schwab;
 use schw::commands::{accounts, api, positions, transactions, Ctx, ACCOUNT_NUMBERS};
 use schw::config::{self, Config, KEYCHAIN_APP, KEYCHAIN_TOKENS};
 use schw::credential::{self, AppCredential};
-use schw::oauth;
+use schw::{oauth, BIN};
 
-const BIN: &str = "schw";
 const REPO: &str = "piekstra/schwab-cli";
 
 /// Charles Schwab brokerage accounts, positions, and transaction history from
@@ -207,13 +209,18 @@ fn auth(
         AuthCmd::Status => status(cli, creds, cfg),
         AuthCmd::Refresh => refresh(cli, creds, cfg),
         AuthCmd::Logout(args) => {
-            creds.delete(KEYCHAIN_TOKENS)?;
-            if args.forget {
+            logout_steps(
                 // The app credential is deliberately *not* dropped by a plain
                 // logout. Re-registering an app costs days in Schwab's approval
                 // queue, so throwing one away has to be asked for explicitly.
-                creds.delete(KEYCHAIN_APP)?;
-                store.clear()?;
+                args.forget,
+                || creds.delete(KEYCHAIN_APP).map(drop),
+                || store.clear().map(drop),
+                // The delete runs with or without the lock; a renewal in flight
+                // must not store the session again behind it.
+                || RefreshLock::forget_for_binary(BIN, || creds.delete(KEYCHAIN_TOKENS)).map(drop),
+            )?;
+            if args.forget {
                 if !cli.common.quiet {
                     eprintln!("session cleared, app credential removed, config cleared");
                 }
@@ -285,6 +292,16 @@ fn login(
         ));
     }
 
+    let lock = RefreshLock::for_binary(BIN)?;
+    // The same test `args.source.read` makes for whether a person will be prompted.
+    if args.source.stdin || args.source.from_env.is_some() || !std::io::stdin().is_terminal() {
+        // The code in that URL is already running out: refuse an unusable lock, but
+        // do not wait on a busy one before spending it. The write below waits.
+        lock.try_hold(|| Ok(()))?;
+    } else {
+        lock.before_signin()?;
+    }
+
     if !cli.common.quiet {
         eprintln!("1. Open this URL and sign in to Schwab, then select the accounts to link:\n");
         eprintln!("   {url}\n");
@@ -319,7 +336,9 @@ fn login(
         &redirect_uri,
         oauth::now_unix(),
     )?;
-    credential::write_tokens(creds, &tokens)?;
+    // Under the lock, so a renewal in flight cannot overwrite this session and its
+    // new 7-day deadline with the old one's.
+    lock.store_signin(|| credential::write_tokens(creds, &tokens))?;
 
     if !cli.common.quiet {
         eprintln!(
@@ -365,32 +384,32 @@ fn open_browser(url: &str, quiet: bool) {
     }
 }
 
+/// `auth logout`'s removals. `--forget`'s come first and none stops another: the
+/// session's delete can wait on the token-refresh lock, and neither a busy lock nor
+/// an interrupted wait may keep the app secret on the machine. The result is the
+/// first failure.
+fn logout_steps(
+    forget: bool,
+    app: impl FnOnce() -> Result<(), CliError>,
+    config: impl FnOnce() -> Result<(), CliError>,
+    session: impl FnOnce() -> Result<(), CliError>,
+) -> Result<(), CliError> {
+    let (app, config) = if forget {
+        (app(), config())
+    } else {
+        (Ok(()), Ok(()))
+    };
+    let session = session();
+    app.and(config).and(session)
+}
+
 fn refresh(cli: &Cli, creds: &CredentialStore, cfg: &Config) -> Result<(), CliError> {
-    let app = credential::require_app(creds)?;
-    let tokens = credential::read_tokens(creds)?
-        .ok_or_else(|| CliError::Auth("not logged in — run `schw auth login`".into()))?;
-    let now = oauth::now_unix();
-    if tokens.refresh_expired(now) {
-        return Err(CliError::Auth(
-            "the refresh token has expired (they last 7 days and cannot be renewed) — \
-             run `schw auth login`"
-                .into(),
-        ));
-    }
-    let http = pk_cli_http::client(BIN, env!("CARGO_PKG_VERSION"))?;
-    let fresh = oauth::refresh_tokens(
-        &http,
-        &cfg.base_url(),
-        &app,
-        &tokens.refresh_token,
-        now,
-        tokens.refresh_expires_at,
-    )?;
-    credential::write_tokens(creds, &fresh)?;
+    let client = Schwab::new(cfg, creds, cli.common.verbose)?;
+    client.refresh_now()?;
     if !cli.common.quiet {
         eprintln!(
             "access token refreshed; browser re-authorization still required by {}",
-            dates::fmt_iso(dates::civil_from_unix(fresh.refresh_expires_at as i64))
+            dates::fmt_iso(dates::civil_from_unix(client.refresh_expires_at() as i64))
         );
     }
     Ok(())
@@ -499,4 +518,70 @@ fn unknown_key(key: &str) -> CliError {
         "unknown config key `{key}` (known: {})",
         config::KNOWN_KEYS.join(", ")
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell;
+
+    /// What each `logout_steps` removal did, in order, with the session's answer.
+    fn run_logout(forget: bool, session: Result<(), CliError>) -> (Vec<&'static str>, i32) {
+        let ran = RefCell::new(Vec::new());
+        let outcome = logout_steps(
+            forget,
+            || {
+                ran.borrow_mut().push("app");
+                Ok(())
+            },
+            || {
+                ran.borrow_mut().push("config");
+                Ok(())
+            },
+            || {
+                ran.borrow_mut().push("session");
+                session
+            },
+        );
+        (
+            ran.into_inner(),
+            outcome.map_or_else(|e| e.exit_code(), |()| 0),
+        )
+    }
+
+    #[test]
+    fn a_plain_logout_keeps_the_app_credential_and_the_config() {
+        assert_eq!(run_logout(false, Ok(())), (vec!["session"], 0));
+    }
+
+    /// The app secret goes before the session's delete can wait on the lock, so
+    /// neither a busy lock nor an interrupted wait keeps it on the machine.
+    #[test]
+    fn a_busy_lock_does_not_keep_the_app_credential() {
+        let busy = Err(CliError::Upstream("dummy busy lock".into()));
+        assert_eq!(
+            run_logout(true, busy),
+            (vec!["app", "config", "session"], 5)
+        );
+    }
+
+    #[test]
+    fn a_failed_removal_does_not_stop_the_others_and_is_the_result() {
+        let ran = RefCell::new(Vec::new());
+        let err = logout_steps(
+            true,
+            || Err(CliError::Other("dummy keychain failure".into())),
+            || {
+                ran.borrow_mut().push("config");
+                Ok(())
+            },
+            || {
+                ran.borrow_mut().push("session");
+                Err(CliError::Upstream("dummy busy lock".into()))
+            },
+        )
+        .unwrap_err();
+        assert_eq!(*ran.borrow(), ["config", "session"]);
+        assert_eq!(err.exit_code(), 1);
+    }
 }

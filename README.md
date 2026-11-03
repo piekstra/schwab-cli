@@ -143,7 +143,8 @@ error* — see `docs/api.md` §5.
 | `self-update`, `completions`, `info` | family standard |
 
 Exit codes: `0` ok · `2` usage · `3` auth · `4` not found · `5` upstream ·
-`6` refused (a write verb).
+`6` refused (a write verb). Exit `5` also covers another `schw` process holding
+the token-refresh lock past a 75-second wait, in which case nothing was sent.
 
 ## Read-only, enforced in code
 

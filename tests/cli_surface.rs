@@ -28,6 +28,10 @@ fn schw() -> Command {
     // developer's session rather than the logged-out state asserted below.
     // Reading a missing item needs no approval.
     cmd.env("SCHW_KEYCHAIN_SERVICE", "piekstra.schw.hermetic-tests");
+    // The token-refresh lock is anchored to the home directory alone, so no test
+    // can reach the real one through a command added later.
+    cmd.env("HOME", env!("CARGO_TARGET_TMPDIR"));
+    cmd.env("USERPROFILE", env!("CARGO_TARGET_TMPDIR"));
     cmd
 }
 
