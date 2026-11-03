@@ -128,8 +128,9 @@ Hermeticity is enforced by `SCHW_KEYCHAIN_SERVICE`, which replaces the keychain
 service name (`piekstra.schw`) for one invocation. Every black-box test runs
 through the `schw()` helper in `tests/cli_surface.rs`, which sets it to
 `piekstra.schw.hermetic-tests`, a service that holds nothing, and points
-`XDG_CONFIG_HOME` at a scratch directory. Reading a missing keychain item needs
-no approval, so `auth status` answers logged out on any machine. Without the
+`XDG_CONFIG_HOME` and `HOME` at a scratch directory (the token-refresh lock lives
+under `~/.config/schw` whatever `XDG_CONFIG_HOME` says). Reading a missing keychain
+item needs no approval, so `auth status` answers logged out on any machine. Without the
 override, `cargo test` would open the real entries from an ad-hoc-signed binary,
 a new code identity on every rebuild, raising a macOS keychain prompt per entry
 per run, and `auth status` would report the developer's session. New black-box
