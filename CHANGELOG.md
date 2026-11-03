@@ -4,6 +4,13 @@ All notable changes to `schwab-cli` are documented here. Newest first. The proje
 follows [SemVer](https://semver.org/); until 1.0, minors carry the breaking-change
 signal.
 
+## 0.2.1 — 2026-11-03
+
+- `auth logout --forget` also removes `mcp-http-token`, the `mcp --http` bearer token, so
+  forgetting the CLI leaves no credential of its in the keychain.
+- A release is published only once every asset is on it, so `self-update` never sends
+  anyone to a release that lacks their platform. A build that failed leaves a draft.
+
 ## 0.2.0 — 2026-11-03
 
 - `schw mcp`: read-only tools for Claude, `schwab_portfolio` and

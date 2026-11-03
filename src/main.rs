@@ -91,7 +91,8 @@ enum AuthCmd {
     Status,
     /// Trade the refresh token for a new access token, now.
     Refresh,
-    /// Clear the session; --forget also removes the app credential.
+    /// Clear the session; --forget also removes the app credential and the connector's
+    /// bearer token.
     Logout(LogoutArgs),
     /// Store the app key/secret from developer.schwab.com (alias: set-app).
     #[command(visible_alias = "set-app")]
@@ -239,6 +240,7 @@ fn auth(
                 // queue, so throwing one away has to be asked for explicitly.
                 args.forget,
                 || creds.delete(KEYCHAIN_APP).map(drop),
+                || creds.delete(MCP_TOKEN_ACCOUNT).map(drop),
                 || store.clear().map(drop),
                 // The delete runs with or without the lock; a renewal in flight
                 // must not store the session again behind it.
@@ -246,7 +248,10 @@ fn auth(
             )?;
             if args.forget {
                 if !cli.common.quiet {
-                    eprintln!("session cleared, app credential removed, config cleared");
+                    eprintln!(
+                        "session cleared; app credential and connector token removed; \
+                         config cleared"
+                    );
                 }
             } else if !cli.common.quiet {
                 eprintln!(
@@ -408,23 +413,27 @@ fn open_browser(url: &str, quiet: bool) {
     }
 }
 
+/// The keychain item `mcp --new-token` saves the `--http` bearer token in.
+const MCP_TOKEN_ACCOUNT: &str = "mcp-http-token";
+
 /// `auth logout`'s removals. `--forget`'s come first and none stops another: the
 /// session's delete can wait on the token-refresh lock, and neither a busy lock nor
-/// an interrupted wait may keep the app secret on the machine. The result is the
-/// first failure.
+/// an interrupted wait may keep a secret on the machine. The result is the first
+/// failure.
 fn logout_steps(
     forget: bool,
     app: impl FnOnce() -> Result<(), CliError>,
+    connector_token: impl FnOnce() -> Result<(), CliError>,
     config: impl FnOnce() -> Result<(), CliError>,
     session: impl FnOnce() -> Result<(), CliError>,
 ) -> Result<(), CliError> {
-    let (app, config) = if forget {
-        (app(), config())
+    let (app, connector_token, config) = if forget {
+        (app(), connector_token(), config())
     } else {
-        (Ok(()), Ok(()))
+        (Ok(()), Ok(()), Ok(()))
     };
     let session = session();
-    app.and(config).and(session)
+    app.and(connector_token).and(config).and(session)
 }
 
 fn refresh(cli: &Cli, creds: &CredentialStore, cfg: &Config) -> Result<(), CliError> {
@@ -559,6 +568,10 @@ mod tests {
                 Ok(())
             },
             || {
+                ran.borrow_mut().push("token");
+                Ok(())
+            },
+            || {
                 ran.borrow_mut().push("config");
                 Ok(())
             },
@@ -585,7 +598,7 @@ mod tests {
         let busy = Err(CliError::Upstream("dummy busy lock".into()));
         assert_eq!(
             run_logout(true, busy),
-            (vec!["app", "config", "session"], 5)
+            (vec!["app", "token", "config", "session"], 5)
         );
     }
 
@@ -596,6 +609,10 @@ mod tests {
             true,
             || Err(CliError::Other("dummy keychain failure".into())),
             || {
+                ran.borrow_mut().push("token");
+                Ok(())
+            },
+            || {
                 ran.borrow_mut().push("config");
                 Ok(())
             },
@@ -605,7 +622,7 @@ mod tests {
             },
         )
         .unwrap_err();
-        assert_eq!(*ran.borrow(), ["config", "session"]);
+        assert_eq!(*ran.borrow(), ["token", "config", "session"]);
         assert_eq!(err.exit_code(), 1);
     }
 }

@@ -104,10 +104,12 @@ the connector's
 [threat model](https://github.com/piekstra/cli-common/blob/main/connector/README.md#threat-model).
 
 `schw auth logout` removes the Schwab session and does not touch `mcp-http-token` or
-stop `schw mcp --http`. To revoke the connector's access, run `schw mcp --new-token
---overwrite` and restart the server (`launchctl kickstart -k gui/$(id -u)/com.piekstra.schw-mcp-http`);
-the old token works until the restart. To stop serving, run `launchctl bootout
-gui/$(id -u)/com.piekstra.schw-mcp-http` and stop the tunnel.
+stop `schw mcp --http`; `--forget` also removes `mcp-http-token`. A server already running
+keeps the token it started with until it is stopped. To revoke the connector's access and
+keep serving, run `schw mcp --new-token --overwrite` and restart the server (`launchctl
+kickstart -k gui/$(id -u)/com.piekstra.schw-mcp-http`); the old token works until the
+restart. To stop serving, run `launchctl bootout gui/$(id -u)/com.piekstra.schw-mcp-http`
+and stop the tunnel.
 
 ## A note on scope
 
@@ -144,7 +146,8 @@ $ SCHW_APP="$(cat app.json)" schw auth set-credential --from-env SCHW_APP
 
 `schw auth logout` clears the session but **keeps** the app credential — losing
 it means re-registering an app and waiting days for Schwab's approval queue.
-`schw auth logout --forget` removes both and clears the config.
+`schw auth logout --forget` removes both, and the connector's bearer token, and clears the
+config.
 
 Rotating the app secret is `auth set-credential --stdin --overwrite`; also
 rotate it in the Schwab developer portal, since replacing the local copy does
