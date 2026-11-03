@@ -532,7 +532,6 @@ fn a_long_list_pages_and_its_cursor_is_bound_to_its_filters() {
     assert!(says.starts_with("usage:"), "{says}");
 }
 
-/// A repeated row from a server that treats a boundary inclusively is one row.
 /// The scenario this CLI's first cursor left open: a trade posts between pages.
 #[test]
 fn a_trade_that_posts_between_pages_repeats_nothing_and_skips_nothing() {
@@ -543,9 +542,11 @@ fn a_trade_that_posts_between_pages_repeats_nothing_and_skips_nothing() {
             json!({"activityId": id, "type": "TRADE",
                    "tradeDate": format!("2026-03-{day:02}T14:31:02+0000"), "netAmount": 1.5})
         };
-        let mut rows = vec![row(4, 14), row(3, 13), row(2, 12), row(1, 11)];
+        // Two on the 13th, split by the page boundary, and one more posted that day.
+        let mut rows = vec![row(4, 14), row(3, 13), row(2, 13), row(1, 11)];
         if seen_posted.load(std::sync::atomic::Ordering::SeqCst) {
             rows.insert(0, row(5, 15));
+            rows.insert(1, row(6, 13));
         }
         rows
     }));
@@ -557,16 +558,34 @@ fn a_trade_that_posts_between_pages_repeats_nothing_and_skips_nothing() {
             .as_array()
             .unwrap()
             .iter()
-            .map(|i| i["date"].as_str().unwrap().to_string())
+            .map(|i| i["id"].as_str().unwrap().to_string())
             .collect()
     };
-    assert_eq!(ids(&first), ["2026-03-14", "2026-03-13"]);
+    let first_ids = ids(&first);
+    assert_eq!(first_ids.len(), 2);
+    assert_eq!(first_ids[0], "4");
     posted.store(true, std::sync::atomic::Ordering::SeqCst);
     args["cursor"] = first["next_cursor"].clone();
-    let second = ok(&tools, TRANSACTIONS_TOOL, args);
-    assert_eq!(ids(&second), ["2026-03-12", "2026-03-11"]);
+    let mut seen = first_ids;
+    let second = ok(&tools, TRANSACTIONS_TOOL, args.clone());
+    seen.extend(ids(&second));
+    if let Some(cursor) = second["next_cursor"].as_str() {
+        args["cursor"] = json!(cursor);
+        seen.extend(ids(&ok(&tools, TRANSACTIONS_TOOL, args)));
+    }
+    // Every row that was there is seen once. Which side of the cursor the new row of the 13th
+    // falls on is up to its fingerprint.
+    for id in ["4", "3", "2", "1"] {
+        assert_eq!(
+            seen.iter().filter(|s| *s == id).count(),
+            1,
+            "{id}: {seen:?}"
+        );
+    }
+    assert!(!seen.contains(&"5".to_string()), "{seen:?}");
 }
 
+/// A repeated row from a server that treats a boundary inclusively is one row.
 #[test]
 fn a_row_two_windows_return_is_counted_once() {
     let tools = with(Fixtures::default().with_windows(|_, _| {
