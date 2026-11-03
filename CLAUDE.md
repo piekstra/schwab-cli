@@ -12,9 +12,11 @@ Claude-specific notes:
   from those captures. Anything not exercised that day is still documented-only;
   `docs/api.md` says which is which. Don't write "verified" about anything you
   didn't actually run.
-- **Tests are offline.** No test may touch the network, the keychain, or a
-  credential. If you need new Schwab data, add a fixture and cite the doc URL
-  in `tests/fixtures/README.md`.
+- **Tests are offline.** No test may touch the network, the real keychain
+  entries, or a credential. Black-box tests go through `schw()` in
+  `tests/cli_surface.rs`, which points `SCHW_KEYCHAIN_SERVICE` at an empty
+  service (AGENTS.md, "Tests"). If you need new Schwab data, add a fixture and
+  cite the doc URL in `tests/fixtures/README.md`.
 - **This CLI is read-only, enforced in three places that must agree:**
   `client::Schwab` (no verb but GET), the `api` verb guard, and the claims in
   `README.md`/`AGENTS.md`. Change one, change all three. Schwab's Trader API

@@ -31,7 +31,7 @@ contribution is licensed under those same terms.
 
 ```console
 $ make verify     # fmt-check + clippy -D warnings + tests + smoke — the CI gate
-$ make test       # unit + integration (fully offline; no network, no creds)
+$ make test       # unit + integration (fully offline; no network, no creds, never the real keychain)
 $ make dev        # debug build, re-signed so keychain grants survive rebuilds
 $ cargo run -- <command>
 ```

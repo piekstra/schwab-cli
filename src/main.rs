@@ -134,7 +134,19 @@ fn main() {
 
 fn run(cli: &Cli) -> Result<(), CliError> {
     let store = ConfigStore::new(BIN);
-    let creds = CredentialStore::for_binary(BIN);
+    // `SCHW_KEYCHAIN_SERVICE` exists for the test suite: pointing it at a
+    // service that holds nothing keeps the suite hermetic on a machine where a
+    // real app credential and session are stored. Reading a *missing* keychain
+    // item needs no user approval, whereas the real `piekstra.schw` entries
+    // would be opened by the ad-hoc-signed binary `cargo test` builds — a new
+    // code identity on every rebuild, so a macOS keychain prompt per entry per
+    // run — and `auth status` would report the developer's session instead of
+    // the logged-out state the tests assert. It only renames which service is
+    // read and written; it never carries key material.
+    let creds = match std::env::var("SCHW_KEYCHAIN_SERVICE") {
+        Ok(service) if !service.is_empty() => CredentialStore::new(service),
+        _ => CredentialStore::for_binary(BIN),
+    };
     let cfg: Config = store.load()?;
     let ctx = Ctx {
         common: &cli.common,
