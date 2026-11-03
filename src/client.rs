@@ -57,7 +57,7 @@ impl<'a> Schwab<'a> {
             CliError::Auth("not logged in to Schwab — run `schw auth login`".into())
         })?;
         Ok(Self {
-            http: pk_cli_http::client("schw", env!("CARGO_PKG_VERSION"))?,
+            http: http()?,
             base_url: cfg.base_url(),
             app,
             creds,
@@ -230,6 +230,15 @@ fn renew_session(
 /// server asked again and again must not spend a grant on each.
 fn worth_a_renewal(refusal: &str) -> bool {
     has_status(refusal, 401)
+}
+
+/// The client for every request here. Schwab answers on its own host, and the token endpoint's
+/// body holds a code or a refresh token, which reqwest would re-send on a 307 or 308 to any host.
+pub fn http() -> Result<reqwest::blocking::Client, CliError> {
+    pk_cli_http::builder(crate::BIN, env!("CARGO_PKG_VERSION"))
+        .redirect(pk_cli_core::transport::same_host_redirects())
+        .build()
+        .map_err(|e| CliError::Other(format!("failed to build HTTP client: {e}")))
 }
 
 /// A failure that got no answer, without its URL. `reqwest` prints the URL it was

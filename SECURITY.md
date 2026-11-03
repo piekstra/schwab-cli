@@ -153,6 +153,8 @@ Rotating the app secret is `auth set-credential --stdin --overwrite`; also
 rotate it in the Schwab developer portal, since replacing the local copy does
 not.
 
+On Windows, whose Credential Manager holds 2,560 bytes per credential, a longer value is stored across several credentials with the suffix `.pk-split-` and read back whole. After a downgrade, run `schw auth logout --forget` again from a current build: an older build's logout leaves the parts.
+
 ## A note on macOS keychain grants
 
 `cargo install` ad-hoc signs the binary, minting a new code identity each time,

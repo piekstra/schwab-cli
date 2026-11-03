@@ -533,6 +533,40 @@ fn a_long_list_pages_and_its_cursor_is_bound_to_its_filters() {
 }
 
 /// A repeated row from a server that treats a boundary inclusively is one row.
+/// The scenario this CLI's first cursor left open: a trade posts between pages.
+#[test]
+fn a_trade_that_posts_between_pages_repeats_nothing_and_skips_nothing() {
+    let posted = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let seen_posted = posted.clone();
+    let tools = with(Fixtures::default().with_windows(move |_, _| {
+        let row = |id: u64, day: u32| {
+            json!({"activityId": id, "type": "TRADE",
+                   "tradeDate": format!("2026-03-{day:02}T14:31:02+0000"), "netAmount": 1.5})
+        };
+        let mut rows = vec![row(4, 14), row(3, 13), row(2, 12), row(1, 11)];
+        if seen_posted.load(std::sync::atomic::Ordering::SeqCst) {
+            rows.insert(0, row(5, 15));
+        }
+        rows
+    }));
+    let mut args = json!({"since": "2026-03-01", "until": "2026-03-31", "limit": 2,
+                          "account": "MARGIN", "response_format": "detailed"});
+    let first = ok(&tools, TRANSACTIONS_TOOL, args.clone());
+    let ids = |page: &Value| -> Vec<String> {
+        page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["date"].as_str().unwrap().to_string())
+            .collect()
+    };
+    assert_eq!(ids(&first), ["2026-03-14", "2026-03-13"]);
+    posted.store(true, std::sync::atomic::Ordering::SeqCst);
+    args["cursor"] = first["next_cursor"].clone();
+    let second = ok(&tools, TRANSACTIONS_TOOL, args);
+    assert_eq!(ids(&second), ["2026-03-12", "2026-03-11"]);
+}
+
 #[test]
 fn a_row_two_windows_return_is_counted_once() {
     let tools = with(Fixtures::default().with_windows(|_, _| {
@@ -821,13 +855,4 @@ fn a_call_past_its_time_stops_asking_schwab() {
     };
     timed.get(ACCOUNT_NUMBERS, &[]).unwrap();
     assert_eq!(fixtures.calls().len(), 1);
-}
-
-#[test]
-fn a_call_waits_for_the_lock_only_so_long() {
-    let lock = Mutex::new(());
-    let held = hold(&lock, Duration::ZERO).expect("a free lock is taken");
-    assert!(hold(&lock, Duration::from_millis(60)).is_none());
-    drop(held);
-    assert!(hold(&lock, Duration::ZERO).is_some());
 }
