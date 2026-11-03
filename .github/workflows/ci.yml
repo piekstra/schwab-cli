@@ -24,7 +24,8 @@ jobs:
     # Linux, not macOS. This is a private repo, so runner minutes are billed
     # directly and macOS costs ~10x Linux. Nothing in the gate is
     # platform-specific: the whole test suite is offline (no network, no
-    # keychain, no OAuth), and the one OS-coupled dependency — `keyring` via
+    # OAuth, and the keychain only through an empty test service set by
+    # SCHW_KEYCHAIN_SERVICE), and the one OS-coupled dependency — `keyring` via
     # pk-cli-secrets — has a Linux backend that compiles against libdbus, so
     # the build and clippy still typecheck the keychain code path here.
     #
