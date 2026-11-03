@@ -51,7 +51,8 @@ pinned to tag `v0.20.0`.
   JSON document per invocation. Human output → stdout, diagnostics → stderr.
 - **Validate arguments before touching the keychain or the network.** `--help`
   and a typo must never prompt for keychain access or spend a token.
-- **Exit codes:** 0 ok · 2 usage · 3 auth · 4 not found · 5 upstream · 6 refused.
+- **Exit codes:** 0 ok · 2 usage · 3 auth · 4 not found · 5 upstream, or the
+  token-refresh lock busy past its wait (nothing sent, safe to retry) · 6 refused.
 - **ISO `YYYY-MM-DD` on every date flag.** Schwab's
   `yyyy-MM-dd'T'HH:mm:ss.SSSZ` is an internal detail.
 - **Money as strings**, never floats, per the family output contract.

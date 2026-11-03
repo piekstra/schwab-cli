@@ -350,10 +350,17 @@ whatever `XDG_CONFIG_HOME` says). It reads the tokens again once it holds the
 lock. If the stored access token is no longer the one this process held and is
 still good, another process renewed: no grant, and this process uses those
 tokens. `auth refresh` always posts a grant, with the stored refresh token. A wait
-is bounded at 75 s, then exit 5 naming the lock with nothing sent. A lock file
-that cannot be created or locked is exit 1. `auth login` and `auth logout` hold it
-around their keychain write only, so a renewal in flight cannot overwrite a new
-session and its new deadline, or store a session again after a logout.
+is bounded at 75 s, then exit 5 naming the lock with nothing sent, which is safe to
+retry. A lock file that cannot be created or locked is exit 1.
+
+`auth login` and `auth logout` hold it around their keychain write only, so a
+renewal in flight cannot overwrite a new session and its new deadline, or store a
+session again after a logout. A login checks the lock before it asks a person for
+anything. A login whose redirected URL is piped in or read from the environment only
+refuses an unusable lock and does not wait on a busy one, because the code in that
+URL lasts about 30 s; its write still waits. `auth logout --forget` removes the app
+credential and config before the session, so the lock cannot keep them on the
+machine.
 
 What this protects is two copies both renewing, for example two commands an agent
 runs at once. Schwab documents no revocation on reuse of a refresh token, and none
