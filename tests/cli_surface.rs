@@ -248,3 +248,16 @@ fn completions_render_for_every_supported_shell() {
             .stdout(predicate::str::contains("schw"));
     }
 }
+
+/// Any non-empty NO_COLOR disables color, per no-color.org. Read as a boolean
+/// flag, NO_COLOR=1 was a usage error on every command.
+#[test]
+fn no_color_in_the_environment_never_fails_a_command() {
+    for v in ["1", "true", "0", ""] {
+        schw()
+            .env("NO_COLOR", v)
+            .args(["completions", "bash"])
+            .assert()
+            .success();
+    }
+}

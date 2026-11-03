@@ -7,7 +7,7 @@ Canonical guide for anyone — human or agent — working in this repo.
 `schw`, a piekstra-family CLI over Charles Schwab's Trader API
 (`api.schwabapi.com`). Read-only. Conforms to
 [piekstra-cli/1](https://github.com/piekstra/cli-common); the shared crates are
-pinned to tag `v0.5.0`.
+pinned to tag `v0.15.1`.
 
 ## The four facts that shape everything here
 

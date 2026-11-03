@@ -1349,8 +1349,8 @@ dependencies = [
 
 [[package]]
 name = "pk-cli-auth"
-version = "0.5.0"
-source = "git+https://github.com/piekstra/cli-common?tag=v0.5.0#d177aaf2a36aa87a20443d383a02bf704149b907"
+version = "0.15.1"
+source = "git+https://github.com/piekstra/cli-common?tag=v0.15.1#1873d2a744dd026599d89f0fa46820b2fa77510f"
 dependencies = [
  "clap",
  "pk-cli-core",
@@ -1361,8 +1361,8 @@ dependencies = [
 
 [[package]]
 name = "pk-cli-config"
-version = "0.5.0"
-source = "git+https://github.com/piekstra/cli-common?tag=v0.5.0#d177aaf2a36aa87a20443d383a02bf704149b907"
+version = "0.15.1"
+source = "git+https://github.com/piekstra/cli-common?tag=v0.15.1#1873d2a744dd026599d89f0fa46820b2fa77510f"
 dependencies = [
  "pk-cli-core",
  "serde",
@@ -1371,10 +1371,11 @@ dependencies = [
 
 [[package]]
 name = "pk-cli-core"
-version = "0.5.0"
-source = "git+https://github.com/piekstra/cli-common?tag=v0.5.0#d177aaf2a36aa87a20443d383a02bf704149b907"
+version = "0.15.1"
+source = "git+https://github.com/piekstra/cli-common?tag=v0.15.1#1873d2a744dd026599d89f0fa46820b2fa77510f"
 dependencies = [
  "clap",
+ "libc",
  "reqwest",
  "serde",
  "serde_json",
@@ -1382,8 +1383,8 @@ dependencies = [
 
 [[package]]
 name = "pk-cli-http"
-version = "0.5.0"
-source = "git+https://github.com/piekstra/cli-common?tag=v0.5.0#d177aaf2a36aa87a20443d383a02bf704149b907"
+version = "0.15.1"
+source = "git+https://github.com/piekstra/cli-common?tag=v0.15.1#1873d2a744dd026599d89f0fa46820b2fa77510f"
 dependencies = [
  "clap",
  "pk-cli-core",
@@ -1393,20 +1394,22 @@ dependencies = [
 
 [[package]]
 name = "pk-cli-secrets"
-version = "0.5.0"
-source = "git+https://github.com/piekstra/cli-common?tag=v0.5.0#d177aaf2a36aa87a20443d383a02bf704149b907"
+version = "0.15.1"
+source = "git+https://github.com/piekstra/cli-common?tag=v0.15.1#1873d2a744dd026599d89f0fa46820b2fa77510f"
 dependencies = [
  "clap",
  "keyring",
  "pk-cli-core",
  "rpassword",
+ "serde",
+ "serde_json",
  "zeroize",
 ]
 
 [[package]]
 name = "pk-cli-selfupdate"
-version = "0.5.0"
-source = "git+https://github.com/piekstra/cli-common?tag=v0.5.0#d177aaf2a36aa87a20443d383a02bf704149b907"
+version = "0.15.1"
+source = "git+https://github.com/piekstra/cli-common?tag=v0.15.1#1873d2a744dd026599d89f0fa46820b2fa77510f"
 dependencies = [
  "clap",
  "flate2",
@@ -1826,7 +1829,7 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "schwab-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assert_cmd",
  "base64 0.23.1",
