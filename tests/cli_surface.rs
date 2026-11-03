@@ -56,6 +56,7 @@ fn every_help_page_renders() {
         vec!["transactions", "--help"],
         vec!["transactions", "list", "--help"],
         vec!["api", "--help"],
+        vec!["mcp", "--help"],
         vec!["self-update", "--help"],
         vec!["completions", "--help"],
         vec!["info", "--help"],

@@ -90,7 +90,7 @@ impl<'a> Schwab<'a> {
             // authoritative answer, so honour it: refresh once, retry once.
             // `refresh` fails outright when the refresh token is spent, so
             // this cannot loop.
-            Err(CliError::Auth(first)) => {
+            Err(CliError::Auth(first)) if worth_a_renewal(&first) => {
                 if self.verbose {
                     eprintln!("access token rejected; refreshing and retrying once");
                 }
@@ -222,6 +222,13 @@ fn renew_session(
             Ok(fresh)
         },
     )
+}
+
+/// Whether a refused request can be fixed by renewing the token. Only a 401 can:
+/// a 403 is an entitlement refusal that a new token gets too, and a long-running
+/// server asked again and again must not spend a grant on each.
+fn worth_a_renewal(refusal: &str) -> bool {
+    refusal.ends_with("(HTTP 401)")
 }
 
 /// Map a response onto the exit-code contract, preferring Schwab's own message
@@ -459,6 +466,13 @@ mod tests {
                 Ok(())
             })
             .unwrap();
+    }
+
+    #[test]
+    fn only_a_401_is_worth_a_renewal() {
+        assert!(worth_a_renewal("Schwab rejected it (HTTP 401)"));
+        assert!(!worth_a_renewal("the app is not entitled (HTTP 403)"));
+        assert!(!worth_a_renewal("not logged in to Schwab"));
     }
 
     #[test]

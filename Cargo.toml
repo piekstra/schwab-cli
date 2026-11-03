@@ -1,8 +1,8 @@
 [package]
 name = "schwab-cli"
-version = "0.1.3"
+version = "0.2.0"
 edition = "2021"
-# pk-cli-auth (cli-common v0.20.0) needs 1.89.
+# pk-cli-auth (cli-common v0.21.0) needs 1.89.
 rust-version = "1.89"
 description = "Charles Schwab brokerage accounts, positions, and realized gain/loss transaction history from the command line — Keychain-secured, agent-friendly. Read-only. Unofficial."
 license = "MIT OR Apache-2.0"
@@ -27,12 +27,15 @@ serde = { version = "1", features = ["derive"] }
 # preserve_order keeps DTO fields and table columns in the order the code builds
 # them, rather than alphabetized by serde_json's default map ordering.
 serde_json = { version = "1", features = ["preserve_order"] }
-pk-cli-core = { git = "https://github.com/piekstra/cli-common", tag = "v0.20.0", features = ["reqwest"] }
-pk-cli-secrets = { git = "https://github.com/piekstra/cli-common", tag = "v0.20.0" }
-pk-cli-config = { git = "https://github.com/piekstra/cli-common", tag = "v0.20.0" }
-pk-cli-selfupdate = { git = "https://github.com/piekstra/cli-common", tag = "v0.20.0" }
-pk-cli-auth = { git = "https://github.com/piekstra/cli-common", tag = "v0.20.0" }
-pk-cli-http = { git = "https://github.com/piekstra/cli-common", tag = "v0.20.0" }
+pk-cli-core = { git = "https://github.com/piekstra/cli-common", tag = "v0.21.0", features = ["reqwest"] }
+pk-cli-secrets = { git = "https://github.com/piekstra/cli-common", tag = "v0.21.0" }
+pk-cli-config = { git = "https://github.com/piekstra/cli-common", tag = "v0.21.0" }
+pk-cli-selfupdate = { git = "https://github.com/piekstra/cli-common", tag = "v0.21.0" }
+pk-cli-auth = { git = "https://github.com/piekstra/cli-common", tag = "v0.21.0" }
+pk-cli-http = { git = "https://github.com/piekstra/cli-common", tag = "v0.21.0" }
+# `schw mcp`: the MCP profile's tools over the same reads (DESIGN.md §1.9).
+pk-cli-mcp = { git = "https://github.com/piekstra/cli-common", tag = "v0.21.0", features = ["stdio", "http"] }
+schemars = "1"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 
 # Schwab's token endpoint authenticates the *app* with HTTP Basic
@@ -40,6 +43,8 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 base64 = "0.23"
 
 [dev-dependencies]
+# The MCP profile's conformance checks, for the tests only.
+pk-cli-mcp = { git = "https://github.com/piekstra/cli-common", tag = "v0.21.0", features = ["test-util"] }
 assert_cmd = "2"
 predicates = "3"
 tempfile = "3"

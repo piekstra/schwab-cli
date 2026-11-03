@@ -9,6 +9,7 @@ pub mod client;
 pub mod commands;
 pub mod config;
 pub mod credential;
+pub mod mcp;
 pub mod oauth;
 pub mod parse;
 pub mod urlenc;

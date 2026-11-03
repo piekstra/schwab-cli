@@ -72,6 +72,7 @@ smoke: release
 	./target/release/$(BIN) --version
 	./target/release/$(BIN) --help > /dev/null
 	./target/release/$(BIN) info > /dev/null
+	./target/release/$(BIN) mcp --list-tools > /dev/null
 	SCHW_KEYCHAIN_SERVICE=piekstra.schw.hermetic-tests ./target/release/$(BIN) auth status --json > /dev/null
 
 verify: fmt-check lint test smoke

@@ -129,24 +129,7 @@ pub fn run(ctx: &Ctx, cmd: &Cmd) -> Result<(), CliError> {
     let client = ctx.client()?;
     let path = account_transactions(&account);
     let mut fetch = |start: &str, end: &str| -> Result<Vec<Value>, CliError> {
-        let mut query: Vec<(&str, String)> = vec![
-            ("startDate", start.to_string()),
-            ("endDate", end.to_string()),
-        ];
-        if let Some(t) = &types {
-            query.push(("types", t.clone()));
-        }
-        match client.get(&path, &query)? {
-            Value::Array(page) => Ok(page),
-            // A window with nothing in it answers with an empty array; anything
-            // else is a shape change worth failing loudly on rather than
-            // silently treating as "no transactions".
-            other => Err(CliError::Upstream(format!(
-                "expected a JSON array of transactions, got {} — the response shape has \
-                 changed; see docs/api.md",
-                kind_of(&other)
-            ))),
-        }
+        rows_of(client.get(&path, &query(start, end, types.as_deref()))?)
     };
     let mut rows: Vec<Value> = Vec::new();
     for window in month_windows(since, until) {
@@ -163,6 +146,33 @@ pub fn run(ctx: &Ctx, cmd: &Cmd) -> Result<(), CliError> {
 
     Paged::new("brokerage-transaction", txns).emit(ctx.common.json);
     Ok(())
+}
+
+/// One window's query parameters. No `types` asks for every type: live-verified
+/// 2026-08-12, despite the published schema marking it required.
+pub fn query(start: &str, end: &str, types: Option<&str>) -> Vec<(&'static str, String)> {
+    let mut query = vec![
+        ("startDate", start.to_string()),
+        ("endDate", end.to_string()),
+    ];
+    if let Some(t) = types {
+        query.push(("types", t.to_string()));
+    }
+    query
+}
+
+/// A window with nothing in it answers with an empty array; anything else is a
+/// shape change worth failing loudly on rather than silently treating as "no
+/// transactions".
+pub fn rows_of(answer: Value) -> Result<Vec<Value>, CliError> {
+    match answer {
+        Value::Array(page) => Ok(page),
+        other => Err(CliError::Upstream(format!(
+            "expected a JSON array of transactions, got {} — the response shape has changed; \
+             see docs/api.md",
+            kind_of(&other)
+        ))),
+    }
 }
 
 fn kind_of(v: &Value) -> &'static str {
@@ -197,7 +207,12 @@ fn resolve_range(range: &RangeArgs) -> Result<(Civil, Civil), CliError> {
 /// Schwab's retrievable history, in whole months, used only to decide whether
 /// to warn. Deliberately generous: the point is to flag a request that is
 /// *certainly* beyond reach, not to argue about the boundary.
-const HISTORY_MONTHS: i64 = 12;
+pub const HISTORY_MONTHS: i64 = 12;
+
+/// Whether `since` is further back than Schwab can be relied on to answer.
+pub fn beyond_history(since: Civil, today: Civil) -> bool {
+    (today.0 - since.0) * 12 + (today.1 as i64 - since.1 as i64) > HISTORY_MONTHS
+}
 
 /// Warn when the requested start is beyond what Schwab will return.
 ///
@@ -205,8 +220,7 @@ const HISTORY_MONTHS: i64 = 12;
 /// a tax feed that is the worst possible behaviour, so the CLI says out loud
 /// that the answer may be short. On stderr, so it never pollutes `--json`.
 fn warn_if_beyond_history(since: Civil, today: Civil) {
-    let months = (today.0 - since.0) * 12 + (today.1 as i64 - since.1 as i64);
-    if months > HISTORY_MONTHS {
+    if beyond_history(since, today) {
         eprintln!(
             "warning: --since {} is more than {HISTORY_MONTHS} months ago. Schwab's \
              transactions endpoint may not return history that old, and it reports no \
@@ -315,28 +329,38 @@ pub fn fetch_window(
     window: Window,
     quiet: bool,
 ) -> Result<Vec<Value>, CliError> {
+    fetch_window_noting(fetch, window, &mut |capped, rows| {
+        if !quiet {
+            eprintln!(
+                "warning: {} .. {} returned {rows} rows — Schwab's silent per-response cap — and \
+                 a one-second window cannot be subdivided further. Rows have been dropped and \
+                 this list is incomplete.",
+                capped.start(),
+                capped.end(),
+            );
+        }
+    })
+}
+
+/// [`fetch_window`], telling `on_capped` about a window that still came back at
+/// the cap and cannot be narrowed: a single second holding 3,000+ transactions.
+/// Rows are missing there, and the caller says so rather than letting the capped
+/// answer impersonate a complete one.
+pub fn fetch_window_noting(
+    fetch: &mut impl FnMut(&str, &str) -> Result<Vec<Value>, CliError>,
+    window: Window,
+    on_capped: &mut impl FnMut(&Window, usize),
+) -> Result<Vec<Value>, CliError> {
     let rows = fetch(&window.start(), &window.end())?;
     if rows.len() < RESPONSE_CAP {
         return Ok(rows);
     }
     let Some((older, newer)) = window.halves() else {
-        // A single second holding 3,000+ transactions. Nothing narrower can be
-        // asked for, so say plainly that rows are missing rather than letting
-        // the capped answer impersonate a complete one.
-        if !quiet {
-            eprintln!(
-                "warning: {} .. {} returned {} rows — Schwab's silent per-response cap — and \
-                 a one-second window cannot be subdivided further. Rows have been dropped and \
-                 this list is incomplete.",
-                window.start(),
-                window.end(),
-                rows.len()
-            );
-        }
+        on_capped(&window, rows.len());
         return Ok(rows);
     };
-    let mut out = fetch_window(fetch, older, quiet)?;
-    out.extend(fetch_window(fetch, newer, quiet)?);
+    let mut out = fetch_window_noting(fetch, older, on_capped)?;
+    out.extend(fetch_window_noting(fetch, newer, on_capped)?);
     Ok(out)
 }
 
@@ -347,7 +371,7 @@ pub fn fetch_window(
 /// it is insurance against the server treating a boundary inclusively on both
 /// sides. Double-counting a trade overstates a tax feed exactly as silently as
 /// truncation understates it.
-fn dedupe_by_activity_id(rows: &mut Vec<Value>) {
+pub fn dedupe_by_activity_id(rows: &mut Vec<Value>) {
     let mut seen = std::collections::HashSet::new();
     rows.retain(|row| match activity_id(row) {
         Some(id) => seen.insert(id),

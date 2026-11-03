@@ -222,15 +222,18 @@ pub fn read_app(creds: &CredentialStore) -> Result<Option<AppCredential>, CliErr
     }
 }
 
+/// How [`require_app`]'s message opens, so `schw mcp` can tell a missing app
+/// registration from a missing session: `auth login` fixes only the second.
+pub const NO_APP_CREDENTIAL: &str = "no Schwab app credential stored";
+
 /// Read the stored app credential or explain how to create one.
 pub fn require_app(creds: &CredentialStore) -> Result<AppCredential, CliError> {
     read_app(creds)?.ok_or_else(|| {
-        CliError::Auth(
-            "no Schwab app credential stored — register an app at https://developer.schwab.com, \
-             wait for it to reach \"Ready For Use\", then run \
-             `schw auth set-credential --stdin` (see docs/api.md)"
-                .into(),
-        )
+        CliError::Auth(format!(
+            "{NO_APP_CREDENTIAL} — register an app at https://developer.schwab.com, wait for it \
+             to reach \"Ready For Use\", then run `schw auth set-credential --stdin` (see \
+             docs/api.md)"
+        ))
     })
 }
 

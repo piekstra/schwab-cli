@@ -207,6 +207,7 @@ fn fixtures_contain_only_obvious_dummy_identifiers() {
         "account_numbers.json",
         "accounts.json",
         "positions.json",
+        "positions_margin.json",
         "transactions.json",
         "token_response.json",
         "error_401.json",
@@ -246,6 +247,7 @@ fn fixtures_contain_only_obvious_dummy_identifiers() {
             "account_numbers.json"
                 | "accounts.json"
                 | "positions.json"
+                | "positions_margin.json"
                 | "transactions.json"
                 | "token_response.json"
         ) {

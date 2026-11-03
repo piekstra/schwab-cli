@@ -1,0 +1,55 @@
+{
+  "securitiesAccount": {
+    "type": "MARGIN",
+    "accountNumber": "11111111",
+    "roundTrips": 0,
+    "isDayTrader": false,
+    "isClosingOnlyRestricted": false,
+    "isIntradayMargin": true,
+    "isPortfolioMargin": false,
+    "pfcbFlag": false,
+    "positions": [
+      {
+        "shortQuantity": 0.0,
+        "averagePrice": 2.05,
+        "currentDayProfitLoss": 10.0,
+        "currentDayProfitLossPercentage": 4.88,
+        "longQuantity": 1.0,
+        "settledLongQuantity": 1.0,
+        "settledShortQuantity": 0.0,
+        "instrument": {
+          "assetType": "OPTION",
+          "cusip": "333333333",
+          "symbol": "AAPL  260320C00180000",
+          "uniformSymbol": "AAPL  260320C00180000",
+          "description": "DUMMY AAPL 03/20/2026 180.00 C",
+          "type": "VANILLA"
+        },
+        "marketValue": 215.0,
+        "maintenanceRequirement": 0.0,
+        "averageLongPrice": 2.05,
+        "taxLotAverageLongPrice": 2.05,
+        "longOpenProfitLoss": 10.0,
+        "previousSessionLongQuantity": 1.0,
+        "currentDayCost": 0.0
+      }
+    ],
+    "currentBalances": {
+      "cashBalance": 5000.0,
+      "liquidationValue": 30000.0,
+      "longMarketValue": 25000.0,
+      "shortMarketValue": 0.0,
+      "longOptionMarketValue": 215.0,
+      "shortOptionMarketValue": 0.0,
+      "mutualFundValue": 0.0,
+      "bondValue": 0.0,
+      "equity": 30000.0
+    }
+  },
+  "aggregatedBalance": {
+    "currentLiquidationValue": 30000.0,
+    "liquidationValue": 30000.0,
+    "intradayBuyingPowerAmount": 10000.0,
+    "currentIntradayBuyingPowerAmount": 10000.0
+  }
+}
