@@ -36,7 +36,8 @@ use pk_cli_config::ConfigStore;
 use pk_cli_core::dates::{self, Civil};
 use pk_cli_core::CliError;
 use pk_cli_mcp::{
-    parse_args, ListArgs, Page, PageRequest, Server, ToolDef, ToolError, ToolOutput, Toolset,
+    hold_within, parse_args, ListArgs, Order, Page, PageRequest, PositionKey, PositionRequest,
+    Server, ToolDef, ToolError, ToolOutput, Toolset,
 };
 use pk_cli_secrets::CredentialStore;
 use schemars::JsonSchema;
@@ -126,21 +127,6 @@ impl<R: Reads> Reads for Timed<R> {
     }
 }
 
-/// The lock, or `None` once `wait` has passed.
-fn hold(lock: &Mutex<()>, wait: Duration) -> Option<MutexGuard<'_, ()>> {
-    let until = Instant::now() + wait;
-    loop {
-        match lock.try_lock() {
-            Ok(held) => return Some(held),
-            Err(std::sync::TryLockError::Poisoned(e)) => return Some(e.into_inner()),
-            Err(std::sync::TryLockError::WouldBlock) if Instant::now() >= until => return None,
-            Err(std::sync::TryLockError::WouldBlock) => {
-                std::thread::sleep(Duration::from_millis(50));
-            }
-        }
-    }
-}
-
 /// The live API, through the client the commands use.
 pub struct LiveSource {
     creds: CredentialStore,
@@ -161,7 +147,7 @@ impl Source for LiveSource {
     /// pacing. The config comes first: a malformed one reads no keychain item.
     fn open(&self) -> Result<Box<dyn Reads + '_>, CliError> {
         let deadline = Instant::now() + CALL_BUDGET;
-        let one = hold(&self.one_at_a_time, QUEUE_WAIT).ok_or_else(|| {
+        let one = hold_within(&self.one_at_a_time, QUEUE_WAIT).ok_or_else(|| {
             CliError::Upstream(
                 "another call to Schwab is still running in this server; try again in a minute"
                     .into(),
@@ -419,9 +405,9 @@ impl<S: Source> Toolset for SchwabTools<S> {
                  move money or change anything. Schwab's API has no tax documents, cost basis or \
                  realized gains, so these tools cannot state a realized gain. A Schwab sign-in \
                  lasts 7 days and then needs a person at a browser. Amounts are USD decimal \
-                 strings; keep every digit when adding them. Each page of a list reads Schwab \
-                 again, so a row posted between pages can repeat or be skipped; for a total, \
-                 read the range in one call, with limit up to 200.",
+                 strings; keep every digit when adding them. A transaction posted between \
+                 pages repeats nothing and skips nothing, and is not seen itself until the list \
+                 is read again from the start.",
             )
     }
 
@@ -507,7 +493,7 @@ impl<S: Source> SchwabTools<S> {
         let account_arg = non_empty(args.account.as_deref());
         let kind = type_arg(non_empty(args.kind.as_deref()))?;
         let symbol = non_empty(args.symbol.as_deref());
-        let page = PageRequest::new(
+        let page = PositionRequest::new(
             &args.list,
             &TransactionsFilter {
                 since: &since_text,
@@ -556,13 +542,11 @@ impl<S: Source> SchwabTools<S> {
             }
             for t in parsed {
                 if matches_symbol(t.symbol.as_deref(), symbol) {
-                    matched.push(transaction_item(t, acct, detailed));
+                    let key = PositionKey::new(t.date.as_str(), &t.id);
+                    matched.push((key, transaction_item(t, acct, detailed)));
                 }
             }
         }
-        // Newest first across accounts; a stable sort keeps Schwab's order within
-        // a day, and an undated row comes last.
-        matched.sort_by(|a, b| b.date.cmp(&a.date));
         let note = beyond_history(since, today).then(|| {
             format!(
                 "since is more than {HISTORY_MONTHS} months ago. Schwab returns less with no \
@@ -575,7 +559,13 @@ impl<S: Source> SchwabTools<S> {
             until: until_text,
             complete,
             note,
-            page: page.page(matched, "since/until, account, type or symbol")?,
+            // Newest first across accounts, an undated row last. A row posted between pages
+            // repeats nothing and skips nothing.
+            page: page.page(
+                matched,
+                Order::Descending,
+                "since/until, account, type or symbol",
+            )?,
         })
     }
 }

@@ -532,6 +532,59 @@ fn a_long_list_pages_and_its_cursor_is_bound_to_its_filters() {
     assert!(says.starts_with("usage:"), "{says}");
 }
 
+/// The scenario this CLI's first cursor left open: a trade posts between pages.
+#[test]
+fn a_trade_that_posts_between_pages_repeats_nothing_and_skips_nothing() {
+    let posted = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let seen_posted = posted.clone();
+    let tools = with(Fixtures::default().with_windows(move |_, _| {
+        let row = |id: u64, day: u32| {
+            json!({"activityId": id, "type": "TRADE",
+                   "tradeDate": format!("2026-03-{day:02}T14:31:02+0000"), "netAmount": 1.5})
+        };
+        // Two on the 13th, split by the page boundary, and one more posted that day.
+        let mut rows = vec![row(4, 14), row(3, 13), row(2, 13), row(1, 11)];
+        if seen_posted.load(std::sync::atomic::Ordering::SeqCst) {
+            rows.insert(0, row(5, 15));
+            rows.insert(1, row(6, 13));
+        }
+        rows
+    }));
+    let mut args = json!({"since": "2026-03-01", "until": "2026-03-31", "limit": 2,
+                          "account": "MARGIN", "response_format": "detailed"});
+    let first = ok(&tools, TRANSACTIONS_TOOL, args.clone());
+    let ids = |page: &Value| -> Vec<String> {
+        page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["id"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let first_ids = ids(&first);
+    assert_eq!(first_ids.len(), 2);
+    assert_eq!(first_ids[0], "4");
+    posted.store(true, std::sync::atomic::Ordering::SeqCst);
+    args["cursor"] = first["next_cursor"].clone();
+    let mut seen = first_ids;
+    let second = ok(&tools, TRANSACTIONS_TOOL, args.clone());
+    seen.extend(ids(&second));
+    if let Some(cursor) = second["next_cursor"].as_str() {
+        args["cursor"] = json!(cursor);
+        seen.extend(ids(&ok(&tools, TRANSACTIONS_TOOL, args)));
+    }
+    // Every row that was there is seen once. Which side of the cursor the new row of the 13th
+    // falls on is up to its fingerprint.
+    for id in ["4", "3", "2", "1"] {
+        assert_eq!(
+            seen.iter().filter(|s| *s == id).count(),
+            1,
+            "{id}: {seen:?}"
+        );
+    }
+    assert!(!seen.contains(&"5".to_string()), "{seen:?}");
+}
+
 /// A repeated row from a server that treats a boundary inclusively is one row.
 #[test]
 fn a_row_two_windows_return_is_counted_once() {
@@ -821,13 +874,4 @@ fn a_call_past_its_time_stops_asking_schwab() {
     };
     timed.get(ACCOUNT_NUMBERS, &[]).unwrap();
     assert_eq!(fixtures.calls().len(), 1);
-}
-
-#[test]
-fn a_call_waits_for_the_lock_only_so_long() {
-    let lock = Mutex::new(());
-    let held = hold(&lock, Duration::ZERO).expect("a free lock is taken");
-    assert!(hold(&lock, Duration::from_millis(60)).is_none());
-    drop(held);
-    assert!(hold(&lock, Duration::ZERO).is_some());
 }

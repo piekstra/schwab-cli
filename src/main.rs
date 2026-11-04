@@ -234,13 +234,18 @@ fn auth(
         AuthCmd::Status => status(cli, creds, cfg),
         AuthCmd::Refresh => refresh(cli, creds, cfg),
         AuthCmd::Logout(args) => {
+            let connector_token = std::cell::Cell::new(false);
             logout_steps(
                 // The app credential is deliberately *not* dropped by a plain
                 // logout. Re-registering an app costs days in Schwab's approval
                 // queue, so throwing one away has to be asked for explicitly.
                 args.forget,
                 || creds.delete(KEYCHAIN_APP).map(drop),
-                || creds.delete(pk_cli_mcp::HTTP_TOKEN_ACCOUNT).map(drop),
+                || {
+                    let removed = creds.delete(pk_cli_mcp::HTTP_TOKEN_ACCOUNT)?;
+                    connector_token.set(removed);
+                    Ok(())
+                },
                 || store.clear().map(drop),
                 // The delete runs with or without the lock; a renewal in flight
                 // must not store the session again behind it.
@@ -252,6 +257,9 @@ fn auth(
                         "session cleared; app credential and connector token removed; \
                          config cleared"
                     );
+                    if connector_token.get() {
+                        eprintln!("{}", pk_cli_mcp::stop_note(BIN));
+                    }
                 }
             } else if !cli.common.quiet {
                 eprintln!(
@@ -356,7 +364,7 @@ fn login(
     let pasted = args.source.read(prompt)?;
     let code = oauth::code_from_input(pasted.expose())?;
 
-    let http = pk_cli_http::client(BIN, env!("CARGO_PKG_VERSION"))?;
+    let http = schw::client::http()?;
     let tokens = oauth::exchange_code(
         &http,
         &cfg.base_url(),

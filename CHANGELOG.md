@@ -4,6 +4,17 @@ All notable changes to `schwab-cli` are documented here. Newest first. The proje
 follows [SemVer](https://semver.org/); until 1.0, minors carry the breaking-change
 signal.
 
+## 0.2.2 — 2026-11-03
+
+- `schwab_transactions` pages by position, so a transaction posted between pages repeats
+  nothing and skips nothing. Rows of the same day now run in a fixed order of their own.
+- `auth logout --forget` says what a removed connector token does not end: a running
+  `schw mcp --http` keeps the token it started with.
+- A code or a refresh token stays on Schwab's host. reqwest re-sends a body on a 307 or 308, so
+  every request here now refuses a redirect to another host.
+- On Windows, a session too long for one credential no longer fails at the end of a sign-in.
+- cli-common v0.27.0, up from v0.22.0.
+
 ## 0.2.1 — 2026-11-03
 
 - `auth logout --forget` also removes `mcp-http-token`, the `mcp --http` bearer token, so
