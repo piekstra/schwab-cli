@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "schw",
   "display_name": "Charles Schwab (schw)",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Read-only access to your own Schwab balances, positions and transactions, through the open-source schw CLI.",
   "long_description": "Ask Claude about your Schwab accounts: what each holds and is worth, and what happened over a period (trades, dividends, deposits). Two read-only tools, schwab_portfolio and schwab_transactions; nothing can place, change or cancel an order, move money or change your account. Schwab's API has no tax documents, cost basis or realized gains, so neither do these tools. The extension asks for no password: first install the schw CLI, register an app on developer.schwab.com, and run `schw auth set-credential --stdin` and `schw auth login` in a terminal. That stores the app key and the session in your OS keychain, and the bundled schw reads them from there and renews the session in place. Schwab ends a session after 7 days, so run `schw auth login --overwrite` again when the tools say so. What the tools return goes to Claude as part of your conversation. On macOS the first call asks for keychain access; choose Always Allow. Unofficial; not affiliated with Charles Schwab.",
   "author": {

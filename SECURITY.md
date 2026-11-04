@@ -110,6 +110,7 @@ keep serving, run `schw mcp --new-token --overwrite` and restart the server (`la
 kickstart -k gui/$(id -u)/com.piekstra.schw-mcp-http`); the old token works until the
 restart. To stop serving, run `launchctl bootout gui/$(id -u)/com.piekstra.schw-mcp-http`
 and stop the tunnel.
+A token supplied through `$SCHW_MCP_TOKEN` is not stored, so the logout cannot reach it: to end it, unset the variable and stop the server.
 
 ## A note on scope
 

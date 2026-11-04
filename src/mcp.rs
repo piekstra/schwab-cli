@@ -30,14 +30,14 @@
 //! no credential and no file.
 
 use std::sync::{Mutex, MutexGuard};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use pk_cli_config::ConfigStore;
 use pk_cli_core::dates::{self, Civil};
 use pk_cli_core::CliError;
 use pk_cli_mcp::{
     hold_within, parse_args, ListArgs, Order, Page, PageRequest, PositionKey, PositionRequest,
-    Server, ToolDef, ToolError, ToolOutput, Toolset,
+    ReadBudget, Server, SystemClock, ToolDef, ToolError, ToolOutput, Toolset,
 };
 use pk_cli_secrets::CredentialStore;
 use schemars::JsonSchema;
@@ -109,20 +109,14 @@ pub trait Source {
 
 /// Stops a call's requests once its time is up, so a call nobody is waiting for
 /// ends, rather than walking on and spending the app's request budget.
-struct Timed<R> {
+struct Timed<'c, R> {
     reads: R,
-    deadline: Instant,
+    budget: ReadBudget<'c>,
 }
 
-impl<R: Reads> Reads for Timed<R> {
+impl<R: Reads> Reads for Timed<'_, R> {
     fn get(&self, path: &str, query: &[(&str, String)]) -> Result<Value, CliError> {
-        if Instant::now() >= self.deadline {
-            return Err(CliError::Upstream(format!(
-                "this call stopped after {} seconds without finishing; narrow since/until or \
-                 name an account",
-                CALL_BUDGET.as_secs()
-            )));
-        }
+        self.budget.check(Some("since/until or name an account"))?;
         self.reads.get(path, query)
     }
 }
@@ -146,7 +140,7 @@ impl Source for LiveSource {
     /// One call at a time, so parallel tool calls keep the client's request
     /// pacing. The config comes first: a malformed one reads no keychain item.
     fn open(&self) -> Result<Box<dyn Reads + '_>, CliError> {
-        let deadline = Instant::now() + CALL_BUDGET;
+        let budget = ReadBudget::start(&SystemClock, CALL_BUDGET);
         let one = hold_within(&self.one_at_a_time, QUEUE_WAIT).ok_or_else(|| {
             CliError::Upstream(
                 "another call to Schwab is still running in this server; try again in a minute"
@@ -158,7 +152,7 @@ impl Source for LiveSource {
             _one: one,
             client: Timed {
                 reads: Schwab::new(&cfg, &self.creds, false)?,
-                deadline,
+                budget,
             },
         }))
     }
@@ -166,7 +160,7 @@ impl Source for LiveSource {
 
 struct LiveReads<'a> {
     _one: MutexGuard<'a, ()>,
-    client: Timed<Schwab<'a>>,
+    client: Timed<'static, Schwab<'a>>,
 }
 
 impl Reads for LiveReads<'_> {
