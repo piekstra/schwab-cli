@@ -253,13 +253,8 @@ fn auth(
             )?;
             if args.forget {
                 if !cli.common.quiet {
-                    eprintln!(
-                        "session cleared; app credential and connector token removed; \
-                         config cleared"
-                    );
-                    if connector_token.get() {
-                        eprintln!("{}", pk_cli_mcp::stop_note(BIN));
-                    }
+                    eprintln!("session cleared; app credential removed; config cleared");
+                    eprintln!("{}", pk_cli_mcp::forget_note(BIN, connector_token.get()));
                 }
             } else if !cli.common.quiet {
                 eprintln!(

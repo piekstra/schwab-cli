@@ -4,6 +4,12 @@ All notable changes to `schwab-cli` are documented here. Newest first. The proje
 follows [SemVer](https://semver.org/); until 1.0, minors carry the breaking-change
 signal.
 
+## 0.2.3 — 2026-11-04
+
+- `auth logout --forget` speaks to a server on `$SCHW_MCP_TOKEN` too, which never had a keychain item to remove, and claims a removed token only when there was one.
+- A call past its time answers `usage`, since narrowing `since`/`until` or naming an account is what helps. It answered `upstream`, which says to try the same call again. The budget is cli-common's `ReadBudget` now.
+- cli-common v0.29.0, up from v0.27.0.
+
 ## 0.2.2 — 2026-11-03
 
 - `schwab_transactions` pages by position, so a transaction posted between pages repeats

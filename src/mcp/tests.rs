@@ -858,10 +858,10 @@ fn a_call_past_its_time_stops_asking_schwab() {
     let fixtures = Fixtures::default();
     let timed = Timed {
         reads: &fixtures,
-        deadline: Instant::now(),
+        budget: ReadBudget::start(&SystemClock, Duration::ZERO),
     };
     let err = timed.get(ACCOUNT_NUMBERS, &[]).unwrap_err();
-    assert!(matches!(err, CliError::Upstream(_)), "{err:?}");
+    assert!(matches!(err, CliError::Usage(_)), "{err:?}");
     assert!(err.to_string().contains("narrow"), "{err}");
     assert!(
         fixtures.calls().is_empty(),
@@ -870,7 +870,7 @@ fn a_call_past_its_time_stops_asking_schwab() {
 
     let timed = Timed {
         reads: &fixtures,
-        deadline: Instant::now() + Duration::from_secs(60),
+        budget: ReadBudget::start(&SystemClock, Duration::from_secs(60)),
     };
     timed.get(ACCOUNT_NUMBERS, &[]).unwrap();
     assert_eq!(fixtures.calls().len(), 1);
